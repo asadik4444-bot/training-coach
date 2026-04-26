@@ -8,3 +8,9 @@ DerivedData/
 # curl cookie jars (transient, may contain session tokens)
 specs/api-samples/cookies.txt
 specs/api-samples/*.cookies.txt
+
+# Codex orchestration metadata (logs, prompts, staged commit messages, build-fail reports)
+.codex-logs/
+.codex-prompts/
+.codex-commits/
+.audit-reports/
