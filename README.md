@@ -39,6 +39,16 @@ node --env-file=.env.local --experimental-strip-types scripts/set-telegram-webho
 
 ---
 
+## Re-linking Whoop
+
+To re-link Whoop after token expiry or initial setup:
+
+1. Generate a new setup secret: `openssl rand -hex 32`
+2. Set it as `WHOOP_SETUP_SECRET` env var in Vercel project settings.
+3. Visit `/api/auth/whoop/start?secret=<value>` in your browser to start the OAuth flow.
+
+---
+
 ## How it works
 
 - **Daily cron** (`/api/cron/daily`, runs 06:30 Zurich via `vercel.json`): checks skip/swap flags, fetches WHOOP recovery, picks today's plan from `plan.yml`, and sends a composed Telegram message.
