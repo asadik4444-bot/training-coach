@@ -222,6 +222,134 @@ export async function listAllGoals(): Promise<
   return out as Record<GoalField, number | null>;
 }
 
+// ── protein tracking ─────────────────────────────────────────────────────────
+
+export async function setProtein(date: string, hit: boolean): Promise<void> {
+  const key = `protein:${date}`;
+  await withClient((c) =>
+    c.set(key, hit ? "y" : "n", { EX: ONE_YEAR_SECONDS }),
+  );
+}
+
+export async function getProtein(date: string): Promise<boolean | null> {
+  const key = `protein:${date}`;
+  const v = await withClient((c) => c.get(key));
+  if (v === "y") return true;
+  if (v === "n") return false;
+  return null;
+}
+
+export async function listProtein(
+  daysBack: number,
+): Promise<Array<{ date: string; hit: boolean }>> {
+  const out: Array<{ date: string; hit: boolean }> = [];
+  for (let i = daysBack - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - i);
+    const date = d.toISOString().slice(0, 10);
+    const v = await getProtein(date);
+    if (v != null) out.push({ date, hit: v });
+  }
+  return out;
+}
+
+// ── bedtime tracking ──────────────────────────────────────────────────────────
+
+export async function setBedtime(date: string, time: string): Promise<void> {
+  const key = `bedtime:${date}`;
+  await withClient((c) => c.set(key, time, { EX: ONE_YEAR_SECONDS }));
+}
+
+export async function getBedtime(date: string): Promise<string | null> {
+  const key = `bedtime:${date}`;
+  return await withClient((c) => c.get(key));
+}
+
+export async function listBedtimes(
+  daysBack: number,
+): Promise<Array<{ date: string; time: string }>> {
+  const out: Array<{ date: string; time: string }> = [];
+  for (let i = daysBack - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - i);
+    const date = d.toISOString().slice(0, 10);
+    const t = await getBedtime(date);
+    if (t != null) out.push({ date, time: t });
+  }
+  return out;
+}
+
+// ── pain log ──────────────────────────────────────────────────────────────────
+
+export interface PainEntry {
+  area: string;
+  severity: number;
+  note: string;
+  ts: string;
+}
+
+export async function addPainEntry(
+  date: string,
+  entry: Omit<PainEntry, "ts">,
+): Promise<void> {
+  const key = `pain:${date}`;
+  await withClient(async (c) => {
+    const existing = await c.get(key);
+    const arr: PainEntry[] = existing ? JSON.parse(existing) : [];
+    arr.push({ ...entry, ts: new Date().toISOString() });
+    await c.set(key, JSON.stringify(arr), { EX: ONE_YEAR_SECONDS });
+  });
+}
+
+export async function getPainEntries(date: string): Promise<PainEntry[]> {
+  const key = `pain:${date}`;
+  const v = await withClient((c) => c.get(key));
+  return v ? JSON.parse(v) : [];
+}
+
+export async function listPainEntries(
+  daysBack: number,
+): Promise<Array<{ date: string; entries: PainEntry[] }>> {
+  const out: Array<{ date: string; entries: PainEntry[] }> = [];
+  for (let i = daysBack - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - i);
+    const date = d.toISOString().slice(0, 10);
+    const entries = await getPainEntries(date);
+    if (entries.length > 0) out.push({ date, entries });
+  }
+  return out;
+}
+
+// ── durable archive (no TTL) ─────────────────────────────────────────────────
+
+export async function appendToArchive(
+  monthKey: string,
+  entry: object,
+): Promise<void> {
+  const key = `archive:${monthKey}`;
+  await withClient(async (c) => {
+    const existing = await c.get(key);
+    const arr = existing ? JSON.parse(existing) : [];
+    arr.push(entry);
+    await c.set(key, JSON.stringify(arr)); // NO EXPIRY — durable archive
+  });
+}
+
+export async function getArchiveMonth(monthKey: string): Promise<unknown[]> {
+  const key = `archive:${monthKey}`;
+  const v = await withClient((c) => c.get(key));
+  return v ? JSON.parse(v) : [];
+}
+
+export async function listArchiveMonths(): Promise<string[]> {
+  return await withClient(async (c) => {
+    // Use KEYS for small archive sets (one key per month)
+    const keys = await c.keys("archive:*");
+    return keys.map((k: string) => k.replace("archive:", "")).sort();
+  });
+}
+
 // ── recovery snapshot ────────────────────────────────────────────────────────
 
 export async function setRecoverySnapshot(

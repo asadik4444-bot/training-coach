@@ -19,6 +19,10 @@ import {
   parseDoneText,
   handleGoal,
   handleGoals,
+  handleProtein,
+  handleBedtime,
+  handlePain,
+  handleExport,
 } from "../../src/lib/commands";
 import type { BiometricSnapshot } from "../../src/lib/whoop";
 
@@ -43,6 +47,19 @@ vi.mock("@/lib/kv", () => ({
     hrv: null,
     rhr: null,
   }),
+  // New v7 kv functions
+  setProtein: vi.fn().mockResolvedValue(undefined),
+  getProtein: vi.fn().mockResolvedValue(null),
+  listProtein: vi.fn().mockResolvedValue([]),
+  setBedtime: vi.fn().mockResolvedValue(undefined),
+  getBedtime: vi.fn().mockResolvedValue(null),
+  listBedtimes: vi.fn().mockResolvedValue([]),
+  addPainEntry: vi.fn().mockResolvedValue(undefined),
+  getPainEntries: vi.fn().mockResolvedValue([]),
+  listPainEntries: vi.fn().mockResolvedValue([]),
+  appendToArchive: vi.fn().mockResolvedValue(undefined),
+  getArchiveMonth: vi.fn().mockResolvedValue([]),
+  listArchiveMonths: vi.fn().mockResolvedValue([]),
 }));
 
 import {
@@ -55,6 +72,13 @@ import {
   saveDoneEntry,
   setGoal,
   listAllGoals,
+  setProtein,
+  listProtein,
+  setBedtime,
+  listBedtimes,
+  addPainEntry,
+  listPainEntries,
+  listArchiveMonths,
 } from "@/lib/kv";
 
 const TODAY = "2026-04-26";
@@ -666,5 +690,131 @@ describe("handleGoals", () => {
     const reply = await handleGoals(TODAY);
     expect(reply).toContain("85");
     expect(reply).toContain("80cm");
+  });
+});
+
+// ── /protein ──────────────────────────────────────────────────────────────────
+
+describe("handleProtein", () => {
+  it("logs protein hit for 'y'", async () => {
+    const reply = await handleProtein("y", TODAY);
+    expect(reply).toContain("hit");
+    expect(vi.mocked(setProtein)).toHaveBeenCalledWith(TODAY, true);
+  });
+
+  it("logs protein miss for 'n'", async () => {
+    const reply = await handleProtein("n", TODAY);
+    expect(reply).toContain("miss");
+    expect(vi.mocked(setProtein)).toHaveBeenCalledWith(TODAY, false);
+  });
+
+  it("shows no-data message when history is empty", async () => {
+    vi.mocked(listProtein).mockResolvedValueOnce([]);
+    const reply = await handleProtein("", TODAY);
+    expect(reply).toContain("No protein data");
+  });
+
+  it("shows hit rate when history has entries", async () => {
+    vi.mocked(listProtein).mockResolvedValueOnce([
+      { date: "2026-04-20", hit: true },
+      { date: "2026-04-21", hit: true },
+      { date: "2026-04-22", hit: false },
+      { date: "2026-04-23", hit: true },
+    ]);
+    const reply = await handleProtein("", TODAY);
+    expect(reply).toContain("3/4");
+    expect(reply).toContain("75%");
+  });
+});
+
+// ── /bedtime ──────────────────────────────────────────────────────────────────
+
+describe("handleBedtime", () => {
+  it("logs bedtime for valid HH:MM format", async () => {
+    const reply = await handleBedtime("23:15", TODAY);
+    expect(reply).toContain("23:15");
+    expect(vi.mocked(setBedtime)).toHaveBeenCalledWith(TODAY, "23:15");
+  });
+
+  it("returns usage hint for invalid format", async () => {
+    const reply = await handleBedtime("invalid", TODAY);
+    expect(reply).toContain("Usage");
+  });
+
+  it("shows no-data message when history empty", async () => {
+    vi.mocked(listBedtimes).mockResolvedValueOnce([]);
+    const reply = await handleBedtime("", TODAY);
+    expect(reply).toContain("No bedtime data");
+  });
+
+  it("shows avg bedtime across history entries", async () => {
+    vi.mocked(listBedtimes).mockResolvedValueOnce([
+      { date: "2026-04-24", time: "23:00" },
+      { date: "2026-04-25", time: "23:30" },
+    ]);
+    const reply = await handleBedtime("", TODAY);
+    expect(reply).toContain("23:");
+    expect(reply).toContain("Avg");
+  });
+});
+
+// ── /pain ─────────────────────────────────────────────────────────────────────
+
+describe("handlePain", () => {
+  it("logs pain entry with area, severity, note", async () => {
+    const reply = await handlePain("knee 5 sharp", TODAY);
+    expect(reply).toContain("knee");
+    expect(reply).toContain("5/10");
+    expect(vi.mocked(addPainEntry)).toHaveBeenCalledWith(TODAY, {
+      area: "knee",
+      severity: 5,
+      note: "sharp",
+    });
+  });
+
+  it("rejects severity outside 1-10", async () => {
+    const reply = await handlePain("knee 11 sharp", TODAY);
+    expect(reply).toContain("1–10");
+  });
+
+  it("shows no-pain message when log is empty", async () => {
+    vi.mocked(listPainEntries).mockResolvedValueOnce([]);
+    const reply = await handlePain("", TODAY);
+    expect(reply).toContain("No pain entries");
+  });
+
+  it("shows pain log when entries exist", async () => {
+    vi.mocked(listPainEntries).mockResolvedValueOnce([
+      {
+        date: TODAY,
+        entries: [{ area: "shoulder", severity: 3, note: "dull", ts: "" }],
+      },
+    ]);
+    const reply = await handlePain("", TODAY);
+    expect(reply).toContain("shoulder");
+    expect(reply).toContain("3/10");
+  });
+
+  it("logs pain with no note", async () => {
+    const reply = await handlePain("back 7", TODAY);
+    expect(reply).toContain("back");
+    expect(reply).toContain("7/10");
+  });
+});
+
+// ── /export ───────────────────────────────────────────────────────────────────
+
+describe("handleExport", () => {
+  it("returns no-archive message when no months stored", async () => {
+    vi.mocked(listArchiveMonths).mockResolvedValueOnce([]);
+    const reply = await handleExport();
+    expect(reply).toContain("No archive data");
+  });
+
+  it("returns export URL when archive has months", async () => {
+    vi.mocked(listArchiveMonths).mockResolvedValueOnce(["2026-04"]);
+    const reply = await handleExport();
+    expect(reply).toContain("2026-04");
+    expect(reply).toContain("/api/export");
   });
 });
