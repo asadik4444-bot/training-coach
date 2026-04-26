@@ -68,6 +68,42 @@ export async function getSwap(date: string): Promise<string | null> {
   return await withClient((c) => c.get(key));
 }
 
+// ── biometric snapshot ────────────────────────────────────────────────────────
+
+const NINETY_DAYS_SECONDS = 90 * 24 * 3600;
+
+export async function setBiometricSnapshot(
+  date: string,
+  snapshot: object,
+): Promise<void> {
+  const key = `biometrics:${date}`;
+  await withClient((c) =>
+    c.set(key, JSON.stringify(snapshot), { EX: NINETY_DAYS_SECONDS }),
+  );
+}
+
+export async function getBiometricSnapshot(
+  date: string,
+): Promise<unknown | null> {
+  const key = `biometrics:${date}`;
+  const v = await withClient((c) => c.get(key));
+  return v == null ? null : JSON.parse(v);
+}
+
+export async function listBiometricSnapshots(
+  daysBack: number,
+): Promise<unknown[]> {
+  const out: unknown[] = [];
+  for (let i = daysBack - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - i);
+    const date = d.toISOString().slice(0, 10);
+    const snap = await getBiometricSnapshot(date);
+    if (snap) out.push(snap);
+  }
+  return out;
+}
+
 // ── recovery snapshot ────────────────────────────────────────────────────────
 
 export async function setRecoverySnapshot(
