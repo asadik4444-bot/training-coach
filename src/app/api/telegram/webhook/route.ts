@@ -1,5 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { handleLog, handleSkip, handleSwap } from "@/lib/commands";
+import {
+  handleLog,
+  handleSkip,
+  handleSwap,
+  handleHelp,
+  handleToday,
+  handleHrv,
+  handleRhr,
+  handleSleep,
+  handleZones,
+  handleLoad,
+  handleReport,
+  handleRecent,
+  handleBackfill,
+  handleSetup,
+} from "@/lib/commands";
 import { sendTelegram } from "@/lib/telegram";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +27,12 @@ interface TelegramUpdate {
     text?: string;
     date: number;
   };
+}
+
+function parsePosInt(raw: string | undefined, def: number): number {
+  if (!raw) return def;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : def;
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -35,16 +56,45 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const todayISO = todayDate.toISOString().slice(0, 10);
 
   const text = message.text.trim();
+  // Strip bot username suffix (e.g. /cmd@whoop_trainer_bot → /cmd)
+  const normalized = text.replace(/@\S+/, "").trim();
+  const parts = normalized.split(/\s+/);
+  const cmd = parts[0].toLowerCase();
+  const arg1 = parts[1];
+
   let reply: string;
 
-  if (text.startsWith("/log ")) {
-    reply = await handleLog(text.slice("/log ".length), todayISO);
-  } else if (text === "/skip") {
+  if (cmd === "/log" && parts.length > 1) {
+    reply = await handleLog(normalized.slice("/log ".length), todayISO);
+  } else if (cmd === "/skip") {
     reply = await handleSkip(todayISO);
-  } else if (text.startsWith("/swap ")) {
-    reply = await handleSwap(text.slice("/swap ".length), todayISO);
+  } else if (cmd === "/swap" && arg1) {
+    reply = await handleSwap(arg1, todayISO);
+  } else if (cmd === "/help") {
+    reply = await handleHelp();
+  } else if (cmd === "/today") {
+    reply = await handleToday(todayISO);
+  } else if (cmd === "/hrv") {
+    reply = await handleHrv(parsePosInt(arg1, 7), todayISO);
+  } else if (cmd === "/rhr") {
+    reply = await handleRhr(parsePosInt(arg1, 7), todayISO);
+  } else if (cmd === "/sleep") {
+    reply = await handleSleep(parsePosInt(arg1, 7), todayISO);
+  } else if (cmd === "/zones") {
+    reply = await handleZones(parsePosInt(arg1, 7), todayISO);
+  } else if (cmd === "/load") {
+    reply = await handleLoad(todayISO);
+  } else if (cmd === "/report") {
+    const win = arg1 === "month" ? "month" : arg1 === "year" ? "year" : "week";
+    reply = await handleReport(win, todayISO);
+  } else if (cmd === "/recent") {
+    reply = await handleRecent(parsePosInt(arg1, 5), todayISO);
+  } else if (cmd === "/backfill") {
+    reply = await handleBackfill();
+  } else if (cmd === "/setup") {
+    reply = await handleSetup();
   } else {
-    reply = "Unknown command. Try /log, /skip, /swap";
+    reply = await handleHelp();
   }
 
   await sendTelegram(reply);
