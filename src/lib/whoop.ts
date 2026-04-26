@@ -81,7 +81,9 @@ export async function fetchLatestRecovery(
     throw new Error(
       `Whoop recovery fetch failed: ${res.status} ${await res.text()}`,
     );
-  const data = await res.json();
+  const data = (await res.json()) as {
+    records?: Array<{ score?: { recovery_score?: number } }>;
+  };
   const records = data.records ?? [];
   if (records.length === 0)
     throw new Error("No recovery records returned by Whoop");
