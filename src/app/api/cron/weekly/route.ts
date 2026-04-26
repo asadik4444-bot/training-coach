@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
   getDailyLog,
   isSkipped,
@@ -9,6 +11,8 @@ import {
 import { sendTelegram } from "@/lib/telegram";
 import { computeTrends } from "@/lib/trends";
 import type { BiometricSnapshot } from "@/lib/whoop";
+import { parsePlan } from "@/lib/plan";
+import { decideToday } from "@/lib/coach";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -28,6 +32,16 @@ export async function GET(req: NextRequest) {
     );
   if (req.headers.get("authorization") !== `Bearer ${expected}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  // Read plan phase if available (v3 ritual populates this)
+  let planPhase: string | undefined;
+  try {
+    const planPath = path.join(process.cwd(), "plan.yml");
+    const plan = parsePlan(readFileSync(planPath, "utf-8"));
+    planPhase = plan.phase;
+  } catch {
+    // plan.yml read failure is non-critical
   }
 
   const lines: string[] = ["📊 Weekly summary", ""];
@@ -66,6 +80,10 @@ export async function GET(req: NextRequest) {
 
     lines.push("");
     lines.push("📈 Biometric trends (28-day window)");
+
+    if (planPhase) {
+      lines.push(`Phase: ${planPhase}`);
+    }
 
     if (trends.hrv_baseline_7day !== null) {
       const baseline = Math.round(trends.hrv_baseline_7day);
@@ -109,6 +127,61 @@ export async function GET(req: NextRequest) {
         interpretation = "overreaching risk — deload this week";
       }
       lines.push(`ACWR: ${acwr} (${interpretation})`);
+    }
+
+    // ── Decision flags for today (deduped) ──────────────────────────────────
+    // Use today's snapshot (index 0 = today in the listBiometricSnapshots result)
+    const todaySnap = snaps.find((s) => {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      return s.date === todayStr;
+    });
+    const todayDecision = decideToday(
+      todaySnap?.recovery?.status ?? "no_record",
+      todaySnap?.recovery?.score ?? null,
+      todaySnap?.recovery?.hrv_rmssd_ms ?? null,
+      trends,
+    );
+    if (todayDecision.flags.length > 0) {
+      lines.push("");
+      lines.push("⚠️ Active flags:");
+      const seen = new Set<string>();
+      for (const flag of todayDecision.flags) {
+        if (!seen.has(flag)) {
+          seen.add(flag);
+          lines.push(`  • ${flag}`);
+        }
+      }
+    }
+
+    // ── Top recommendations ──────────────────────────────────────────────────
+    const recs: string[] = [];
+
+    // ACWR sustained high — use today's computed value as proxy
+    if (trends.acwr !== null && trends.acwr > 1.3) {
+      recs.push("Consider cutting volume 10-20% next week");
+    }
+
+    if (
+      trends.sleep_debt_min_7day !== null &&
+      trends.sleep_debt_min_7day > 300
+    ) {
+      recs.push("Prioritize sleep — bias bed time -30min for next week");
+    }
+
+    // HRV trended down >10% across the week
+    if (
+      trends.hrv_today_vs_baseline_pct !== null &&
+      trends.hrv_today_vs_baseline_pct < -10
+    ) {
+      recs.push("Build in a deload");
+    }
+
+    if (recs.length > 0) {
+      lines.push("");
+      lines.push("💡 Top recommendations:");
+      for (const rec of recs) {
+        lines.push(`  • ${rec}`);
+      }
     }
   } catch {
     // trends section is non-critical; omit silently

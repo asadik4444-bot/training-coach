@@ -8,6 +8,7 @@ export interface PlanDay {
 }
 export interface Plan {
   week_start: string;
+  phase?: string; // e.g. hypertrophy | strength | deload | recomp (v3 ritual)
   days: Record<string, PlanDay>;
 }
 
