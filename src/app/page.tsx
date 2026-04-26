@@ -10,11 +10,43 @@ import { polarizedAnalysis, toMetrics } from "@/lib/analytics";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { parsePlan, pickToday } from "@/lib/plan";
+import { cookies } from "next/headers";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   searchParams: Promise<{ key?: string }>;
+}
+
+// ── Auth helper (read-only — cookie setting happens in /api/auth/dashboard) ───
+
+async function isAuthorized(
+  searchParamsKey: string | undefined,
+): Promise<boolean> {
+  const expected = process.env.DASHBOARD_SECRET;
+  if (!expected) return false;
+
+  // Check cookie first
+  const cookieStore = await cookies();
+  const session = cookieStore.get("tc_session")?.value;
+  if (session) {
+    const enc = new TextEncoder();
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(expected),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    const sig = await crypto.subtle.sign("HMAC", cryptoKey, enc.encode("ok"));
+    const sigHex = Array.from(new Uint8Array(sig))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    if (session === sigHex) return true;
+  }
+
+  // Fall back: accept ?key= directly (user will be redirected to set cookie next time)
+  return searchParamsKey === expected;
 }
 
 // ── Unauthorised view ─────────────────────────────────────────────────────────
@@ -36,7 +68,7 @@ function UnauthorizedView() {
         Access denied
       </h1>
       <p style={{ margin: 0, color: "#475569", fontSize: "0.875rem" }}>
-        Add ?key=YOUR_SECRET to the URL
+        Visit /api/auth/dashboard?key=YOUR_SECRET to authenticate
       </p>
     </div>
   );
@@ -164,8 +196,7 @@ function StatRow({ label, value }: { label: string; value: string }) {
 
 export default async function Page({ searchParams }: Props) {
   const { key } = await searchParams;
-  const expected = process.env.DASHBOARD_SECRET;
-  if (!expected || key !== expected) {
+  if (!(await isAuthorized(key))) {
     return <UnauthorizedView />;
   }
 
@@ -530,7 +561,7 @@ export default async function Page({ searchParams }: Props) {
             paddingBottom: "1.5rem",
           }}
         >
-          training-coach v5
+          training-coach v6
         </div>
       </div>
     </>
