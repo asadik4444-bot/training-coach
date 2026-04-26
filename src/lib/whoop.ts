@@ -45,6 +45,26 @@ export async function exchangeCodeForTokens(
   return (await res.json()) as TokenResponse;
 }
 
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  attempts = 3,
+): Promise<T> {
+  let last: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      last = e;
+      if (i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 100 * 4 ** i));
+      }
+    }
+  }
+  throw new Error(
+    `Redis save failed after ${attempts} attempts: ${String(last)}`,
+  );
+}
+
 export async function refreshAccessToken(): Promise<string> {
   const refreshToken = await loadRefreshToken();
   if (!refreshToken)
@@ -67,7 +87,7 @@ export async function refreshAccessToken(): Promise<string> {
     throw new Error(`Whoop refresh failed: ${res.status} ${await res.text()}`);
   const data = (await res.json()) as TokenResponse;
   // Whoop returns a new refresh_token each time; persist it
-  await saveRefreshToken(data.refresh_token);
+  await withRetry(() => saveRefreshToken(data.refresh_token));
   return data.access_token;
 }
 
