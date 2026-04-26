@@ -134,3 +134,52 @@ export function decideToday(
     flags,
   };
 }
+
+// ── Deload detection ──────────────────────────────────────────────────────────
+
+export interface DeloadSignal {
+  triggered: boolean;
+  reasons: string[]; // human-readable reasons
+}
+
+/**
+ * Detect chronic overreaching from trends. Requires 2+ signals to fire.
+ */
+export function detectDeloadNeed(trends: Trends): DeloadSignal {
+  const reasons: string[] = [];
+
+  // 14-day HRV chronic decline
+  if (
+    trends.hrv_today_vs_baseline_pct != null &&
+    trends.hrv_today_vs_baseline_pct < -10
+  ) {
+    reasons.push(
+      `HRV ${Math.abs(trends.hrv_today_vs_baseline_pct).toFixed(0)}% below baseline`,
+    );
+  }
+
+  // RHR drift up
+  if (
+    trends.rhr_today_vs_baseline_bpm != null &&
+    trends.rhr_today_vs_baseline_bpm > 5
+  ) {
+    reasons.push(`RHR up ${trends.rhr_today_vs_baseline_bpm} bpm vs baseline`);
+  }
+
+  // ACWR sustained high
+  if (trends.acwr != null && trends.acwr > 1.4) {
+    reasons.push(`ACWR ${trends.acwr.toFixed(2)} (>1.4 sustained)`);
+  }
+
+  // Sleep debt
+  if (trends.sleep_debt_min_7day != null && trends.sleep_debt_min_7day > 420) {
+    reasons.push(
+      `Sleep debt ${Math.round(trends.sleep_debt_min_7day)}min (>7h cumulative)`,
+    );
+  }
+
+  return {
+    triggered: reasons.length >= 2,
+    reasons,
+  };
+}

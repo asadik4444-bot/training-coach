@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { decideToday } from "../../src/lib/coach";
+import { decideToday, detectDeloadNeed } from "../../src/lib/coach";
 import type { Trends } from "../../src/lib/trends";
 
 const NULL_TRENDS: Trends = {
@@ -218,5 +218,66 @@ describe("decideToday — reason length", () => {
     };
     const result = decideToday("scored", 80, 50, trends);
     expect(result.reason.length).toBeLessThanOrEqual(80);
+  });
+});
+
+// ── detectDeloadNeed ──────────────────────────────────────────────────────────
+
+describe("detectDeloadNeed", () => {
+  it("no signals → not triggered", () => {
+    const result = detectDeloadNeed(NULL_TRENDS);
+    expect(result.triggered).toBe(false);
+    expect(result.reasons).toHaveLength(0);
+  });
+
+  it("1 signal only (HRV) → not triggered (requires 2+)", () => {
+    const trends: Trends = {
+      ...NULL_TRENDS,
+      hrv_today_vs_baseline_pct: -15, // < -10
+    };
+    const result = detectDeloadNeed(trends);
+    expect(result.triggered).toBe(false);
+    expect(result.reasons).toHaveLength(1);
+    expect(result.reasons[0]).toMatch(/HRV/);
+  });
+
+  it("2 signals (HRV + RHR) → triggered", () => {
+    const trends: Trends = {
+      ...NULL_TRENDS,
+      hrv_today_vs_baseline_pct: -12, // < -10
+      rhr_today_vs_baseline_bpm: 6, // > 5
+    };
+    const result = detectDeloadNeed(trends);
+    expect(result.triggered).toBe(true);
+    expect(result.reasons).toHaveLength(2);
+  });
+
+  it("all 4 signals → triggered with 4 reasons", () => {
+    const trends: Trends = {
+      hrv_baseline_7day: 50,
+      hrv_today_vs_baseline_pct: -20,
+      rhr_baseline_7day: 50,
+      rhr_today_vs_baseline_bpm: 8,
+      sleep_efficiency_avg_7day: null,
+      sleep_debt_min_7day: 500, // > 420
+      acwr: 1.5, // > 1.4
+      strain_7day_avg: null,
+      strain_28day_avg: null,
+    };
+    const result = detectDeloadNeed(trends);
+    expect(result.triggered).toBe(true);
+    expect(result.reasons).toHaveLength(4);
+  });
+
+  it("ACWR exactly at boundary 1.4 → no ACWR signal", () => {
+    const trends: Trends = { ...NULL_TRENDS, acwr: 1.4 };
+    const result = detectDeloadNeed(trends);
+    expect(result.reasons.some((r) => r.includes("ACWR"))).toBe(false);
+  });
+
+  it("sleep debt exactly 420 → no sleep signal", () => {
+    const trends: Trends = { ...NULL_TRENDS, sleep_debt_min_7day: 420 };
+    const result = detectDeloadNeed(trends);
+    expect(result.reasons.some((r) => r.includes("Sleep debt"))).toBe(false);
   });
 });

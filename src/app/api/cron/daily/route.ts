@@ -13,7 +13,7 @@ import {
 } from "@/lib/kv";
 import { computeTrends } from "@/lib/trends";
 import type { BiometricSnapshot } from "@/lib/whoop";
-import { decideToday } from "@/lib/coach";
+import { decideToday, detectDeloadNeed } from "@/lib/coach";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -91,6 +91,9 @@ export async function GET(req: NextRequest) {
       trends,
     );
 
+    // Deload detection — prepend warning if 2+ chronic overreaching signals
+    const deload = detectDeloadNeed(trends);
+
     // Build Telegram message
     const planLine = decision.hard_stop
       ? "Mandatory rest. Z2 walk if you feel restless. Sleep early."
@@ -98,11 +101,20 @@ export async function GET(req: NextRequest) {
         ? `Today: ${todayPlan.summary}`
         : "Rest day.";
 
-    const messageLines: string[] = [
+    const messageLines: string[] = [];
+
+    if (deload.triggered) {
+      messageLines.push(
+        `🛑 DELOAD SIGNAL: ${deload.reasons.join(", ")}`,
+        "Consider 5-7 days of reduced volume (50-60%) and easy cardio.",
+      );
+    }
+
+    messageLines.push(
       `${decision.emoji} ${decision.reason}`,
       planLine,
       ...decision.flags.map((f) => `⚠️ ${f}`),
-    ];
+    );
 
     const text = messageLines.join("\n");
     const stale = daysSinceWeekStart(plan) >= 14;
