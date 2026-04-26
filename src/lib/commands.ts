@@ -142,16 +142,56 @@ export async function handleToday(todayISO: string): Promise<string> {
   }
 
   // Today's plan
+  const weekday = new Date(todayISO + "T12:00:00Z").getUTCDay(); // 0=Sun…6=Sat
   try {
     const planPath = path.join(process.cwd(), "plan.yml");
     const plan = parsePlan(readFileSync(planPath, "utf-8"));
-    const weekday = new Date(todayISO + "T12:00:00Z").getUTCDay();
     const day = pickToday(plan, weekday);
     if (day) {
       lines.push(`Plan: [${day.type}] ${day.summary}`);
     }
   } catch {
     // plan read is non-critical
+  }
+
+  // Adaptive weekday context
+  if (weekday === 1) {
+    // Monday: preview this week's plan
+    lines.push("📋 New week. Execute with intent.");
+  } else if (weekday === 3) {
+    // Wednesday: midweek check
+    const snaps7 = (await listBiometricSnapshots(7)) as BiometricSnapshot[];
+    const sessionsThisWeek = snaps7.filter(
+      (s) => s.last_workout != null,
+    ).length;
+    lines.push(`📊 Midweek: ${sessionsThisWeek} sessions logged this week.`);
+    const trds = computeTrends(snaps7);
+    if (trds.acwr !== null) lines.push(`  ACWR: ${trds.acwr.toFixed(2)}`);
+  } else if (weekday === 5) {
+    // Friday: brief week summary
+    const snaps7 = (await listBiometricSnapshots(7)) as BiometricSnapshot[];
+    const sessions = snaps7.filter((s) => s.last_workout != null).length;
+    const avgRec =
+      snaps7.length > 0
+        ? Math.round(
+            snaps7
+              .filter(
+                (s) =>
+                  s.recovery.status === "scored" && s.recovery.score != null,
+              )
+              .reduce((a, s) => a + (s.recovery.score ?? 0), 0) /
+              Math.max(
+                1,
+                snaps7.filter((s) => s.recovery.status === "scored").length,
+              ),
+          )
+        : null;
+    lines.push(
+      `📅 Week so far: ${sessions} sessions${avgRec != null ? `, avg recovery ${avgRec}%` : ""}.`,
+    );
+  } else if (weekday === 0 || weekday === 6) {
+    // Weekend: rest reminder + Monday sneak peek
+    lines.push("🛋️ Rest day. Recharge. Monday kicks off a new block.");
   }
 
   // Protein hit rate (last 7 days)

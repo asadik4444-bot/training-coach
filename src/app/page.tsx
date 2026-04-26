@@ -15,7 +15,7 @@ import { cookies } from "next/headers";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Props {
-  searchParams: Promise<{ key?: string }>;
+  searchParams: Promise<{ key?: string; detail?: string }>;
 }
 
 // ── Auth helper (read-only — cookie setting happens in /api/auth/dashboard) ───
@@ -195,10 +195,11 @@ function StatRow({ label, value }: { label: string; value: string }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default async function Page({ searchParams }: Props) {
-  const { key } = await searchParams;
+  const { key, detail } = await searchParams;
   if (!(await isAuthorized(key))) {
     return <UnauthorizedView />;
   }
+  const showDetail = detail === "1";
 
   // ── Data fetching ──────────────────────────────────────────────────────────
   const [snaps30raw, snaps60raw, weightHistory, waistHistory] =
@@ -419,138 +420,169 @@ export default async function Page({ searchParams }: Props) {
           )}
         </Widget>
 
-        {/* HRV Chart */}
-        <Widget title={`HRV — last ${snaps30.length} days`}>
-          <HrvChart values={hrvValues} />
-          <div
-            style={{
-              display: "flex",
-              gap: "1rem",
-              marginTop: "0.4rem",
-              fontSize: "0.8rem",
-              color: "#94a3b8",
-            }}
-          >
-            <span>Avg {hrvAvg != null ? `${hrvAvg.toFixed(1)}ms` : "—"}</span>
-            {hrvCv != null && <span>CV {hrvCv.toFixed(1)}%</span>}
-            <span>
-              Latest {hrvLatest != null ? `${Math.round(hrvLatest)}ms` : "—"}
-            </span>
-          </div>
-        </Widget>
+        {/* Detail sections — shown only with ?detail=1 */}
+        {showDetail && (
+          <>
+            {/* HRV Chart */}
+            <Widget title={`HRV — last ${snaps30.length} days`}>
+              <HrvChart values={hrvValues} />
+              <div
+                style={{
+                  display: "flex",
+                  gap: "1rem",
+                  marginTop: "0.4rem",
+                  fontSize: "0.8rem",
+                  color: "#94a3b8",
+                }}
+              >
+                <span>
+                  Avg {hrvAvg != null ? `${hrvAvg.toFixed(1)}ms` : "—"}
+                </span>
+                {hrvCv != null && <span>CV {hrvCv.toFixed(1)}%</span>}
+                <span>
+                  Latest{" "}
+                  {hrvLatest != null ? `${Math.round(hrvLatest)}ms` : "—"}
+                </span>
+              </div>
+            </Widget>
 
-        {/* Recovery Bars */}
-        <Widget title={`Recovery — last ${snaps30.length} days`}>
-          <RecoveryBars scores={recScores} />
-          <div
-            style={{
-              display: "flex",
-              gap: "0.75rem",
-              marginTop: "0.4rem",
-              fontSize: "0.75rem",
-              color: "#64748b",
-            }}
-          >
-            <span style={{ color: "#4ade80" }}>■</span>
-            <span>≥67%</span>
-            <span style={{ color: "#facc15" }}>■</span>
-            <span>34–66%</span>
-            <span style={{ color: "#ef4444" }}>■</span>
-            <span>&lt;34%</span>
-          </div>
-        </Widget>
+            {/* Recovery Bars */}
+            <Widget title={`Recovery — last ${snaps30.length} days`}>
+              <RecoveryBars scores={recScores} />
+              <div
+                style={{
+                  display: "flex",
+                  gap: "0.75rem",
+                  marginTop: "0.4rem",
+                  fontSize: "0.75rem",
+                  color: "#64748b",
+                }}
+              >
+                <span style={{ color: "#4ade80" }}>■</span>
+                <span>≥67%</span>
+                <span style={{ color: "#facc15" }}>■</span>
+                <span>34–66%</span>
+                <span style={{ color: "#ef4444" }}>■</span>
+                <span>&lt;34%</span>
+              </div>
+            </Widget>
 
-        {/* Streaks + Body */}
-        <div className="two-col">
-          <Widget title="STREAKS">
-            <StatRow
-              label="Green recovery"
-              value={`🔥 ${streaks.green_recovery}d`}
-            />
-            <StatRow label="Best" value={`${streaks.best_green_recovery}d`} />
-            <StatRow label="No-skip days" value={`✓ ${streaks.no_skip}d`} />
-          </Widget>
-          <Widget title="BODY">
-            <StatRow
-              label="Weight"
-              value={latestWeight != null ? `${latestWeight}kg` : "—"}
-            />
-            <StatRow
-              label="Waist"
-              value={latestWaist != null ? `${latestWaist}cm` : "—"}
-            />
-            {weightHistory.length >= 2 && (
+            {/* Streaks + Body */}
+            <div className="two-col">
+              <Widget title="STREAKS">
+                <StatRow
+                  label="Green recovery"
+                  value={`🔥 ${streaks.green_recovery}d`}
+                />
+                <StatRow
+                  label="Best"
+                  value={`${streaks.best_green_recovery}d`}
+                />
+                <StatRow label="No-skip days" value={`✓ ${streaks.no_skip}d`} />
+              </Widget>
+              <Widget title="BODY">
+                <StatRow
+                  label="Weight"
+                  value={latestWeight != null ? `${latestWeight}kg` : "—"}
+                />
+                <StatRow
+                  label="Waist"
+                  value={latestWaist != null ? `${latestWaist}cm` : "—"}
+                />
+                {weightHistory.length >= 2 && (
+                  <StatRow
+                    label="Δ weight"
+                    value={(() => {
+                      const delta =
+                        weightHistory[weightHistory.length - 1].value -
+                        weightHistory[0].value;
+                      return (delta >= 0 ? "+" : "") + delta.toFixed(1) + "kg";
+                    })()}
+                  />
+                )}
+              </Widget>
+            </div>
+
+            {/* Training load */}
+            <Widget title="TRAINING LOAD (ACWR)">
               <StatRow
-                label="Δ weight"
-                value={(() => {
-                  const delta =
-                    weightHistory[weightHistory.length - 1].value -
-                    weightHistory[0].value;
-                  return (delta >= 0 ? "+" : "") + delta.toFixed(1) + "kg";
-                })()}
+                label="Acute 7d avg"
+                value={
+                  trends.strain_7day_avg != null
+                    ? trends.strain_7day_avg.toFixed(1)
+                    : "—"
+                }
               />
+              <StatRow
+                label="Chronic 28d avg"
+                value={
+                  trends.strain_28day_avg != null
+                    ? trends.strain_28day_avg.toFixed(1)
+                    : "—"
+                }
+              />
+              {trends.acwr != null && (
+                <StatRow
+                  label="ACWR"
+                  value={`${trends.acwr.toFixed(2)} — ${acwrNote}`}
+                />
+              )}
+              {pa.compliance !== "unknown" && (
+                <StatRow
+                  label="Polarized ratio"
+                  value={`${paRatio} (${pa.compliance})`}
+                />
+              )}
+            </Widget>
+
+            {/* Recent workouts */}
+            {recentWorkouts.length > 0 && (
+              <Widget title="RECENT WORKOUTS">
+                {recentWorkouts.map((s) => {
+                  const w = s.last_workout!;
+                  return (
+                    <div
+                      key={s.date}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        padding: "0.2rem 0",
+                        borderBottom: "1px solid #1e293b",
+                        fontSize: "0.8rem",
+                      }}
+                    >
+                      <span style={{ color: "#94a3b8" }}>{s.date}</span>
+                      <span>{w.sport}</span>
+                      <span style={{ color: "#64748b" }}>
+                        strain {w.strain.toFixed(1)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </Widget>
             )}
-          </Widget>
-        </div>
-
-        {/* Training load */}
-        <Widget title="TRAINING LOAD (ACWR)">
-          <StatRow
-            label="Acute 7d avg"
-            value={
-              trends.strain_7day_avg != null
-                ? trends.strain_7day_avg.toFixed(1)
-                : "—"
-            }
-          />
-          <StatRow
-            label="Chronic 28d avg"
-            value={
-              trends.strain_28day_avg != null
-                ? trends.strain_28day_avg.toFixed(1)
-                : "—"
-            }
-          />
-          {trends.acwr != null && (
-            <StatRow
-              label="ACWR"
-              value={`${trends.acwr.toFixed(2)} — ${acwrNote}`}
-            />
-          )}
-          {pa.compliance !== "unknown" && (
-            <StatRow
-              label="Polarized ratio"
-              value={`${paRatio} (${pa.compliance})`}
-            />
-          )}
-        </Widget>
-
-        {/* Recent workouts */}
-        {recentWorkouts.length > 0 && (
-          <Widget title="RECENT WORKOUTS">
-            {recentWorkouts.map((s) => {
-              const w = s.last_workout!;
-              return (
-                <div
-                  key={s.date}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    padding: "0.2rem 0",
-                    borderBottom: "1px solid #1e293b",
-                    fontSize: "0.8rem",
-                  }}
-                >
-                  <span style={{ color: "#94a3b8" }}>{s.date}</span>
-                  <span>{w.sport}</span>
-                  <span style={{ color: "#64748b" }}>
-                    strain {w.strain.toFixed(1)}
-                  </span>
-                </div>
-              );
-            })}
-          </Widget>
+          </>
         )}
+
+        {/* Detail toggle link */}
+        <div
+          style={{
+            textAlign: "center",
+            color: "#475569",
+            fontSize: "0.75rem",
+            paddingTop: "0.5rem",
+          }}
+        >
+          {showDetail ? (
+            <a href="?" style={{ color: "#64748b" }}>
+              ← hero only
+            </a>
+          ) : (
+            <a href="?detail=1" style={{ color: "#64748b" }}>
+              + full detail
+            </a>
+          )}
+        </div>
 
         <div
           style={{
@@ -561,7 +593,7 @@ export default async function Page({ searchParams }: Props) {
             paddingBottom: "1.5rem",
           }}
         >
-          training-coach v6
+          training-coach v7
         </div>
       </div>
     </>
