@@ -5,7 +5,7 @@ import { parsePlan, pickToday } from "@/lib/plan";
 import { refreshAccessToken, fetchLatestRecovery } from "@/lib/whoop";
 import { composeMessage } from "@/lib/message";
 import { sendTelegram } from "@/lib/telegram";
-import { isSkipped, getSwap } from "@/lib/kv";
+import { isSkipped, getSwap, setRecoverySnapshot } from "@/lib/kv";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -62,6 +62,7 @@ export async function GET(req: NextRequest) {
 
     let text: string;
     if (recovery.status === "scored") {
+      await setRecoverySnapshot(todayISO, recovery.score);
       text = composeMessage(recovery.score, todayPlan);
     } else if (recovery.status === "pending") {
       text = `Recovery still computing on Whoop's side. I'll send today's plan once it's ready (try /api/cron/daily later).`;

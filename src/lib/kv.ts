@@ -67,3 +67,23 @@ export async function getSwap(date: string): Promise<string | null> {
   const key = `swap:${date}`;
   return await withClient((c) => c.get(key));
 }
+
+// ── recovery snapshot ────────────────────────────────────────────────────────
+
+export async function setRecoverySnapshot(
+  date: string,
+  score: number,
+): Promise<void> {
+  const key = `recovery:${date}`;
+  await withClient((c) =>
+    c.set(key, String(score), { EX: SIXTY_DAYS_SECONDS }),
+  );
+}
+
+export async function getRecoverySnapshot(
+  date: string,
+): Promise<number | null> {
+  const key = `recovery:${date}`;
+  const v = await withClient((c) => c.get(key));
+  return v == null ? null : Number(v);
+}
