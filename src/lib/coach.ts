@@ -189,7 +189,9 @@ export function detectDeloadNeed(trends: Trends): DeloadSignal {
     trends.rhr_today_vs_baseline_bpm != null &&
     trends.rhr_today_vs_baseline_bpm > 5
   ) {
-    reasons.push(`RHR up ${trends.rhr_today_vs_baseline_bpm} bpm vs baseline`);
+    reasons.push(
+      `RHR up ${trends.rhr_today_vs_baseline_bpm.toFixed(1)} bpm vs baseline`,
+    );
   }
 
   // ACWR sustained high

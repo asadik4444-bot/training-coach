@@ -252,6 +252,16 @@ describe("detectDeloadNeed", () => {
     expect(result.reasons).toHaveLength(2);
   });
 
+  it("formats RHR delta with exactly 1 decimal place", () => {
+    const trends: Trends = {
+      ...NULL_TRENDS,
+      hrv_today_vs_baseline_pct: -12, // < -10
+      rhr_today_vs_baseline_bpm: 11.666666666666666, // > 5
+    };
+    const result = detectDeloadNeed(trends);
+    expect(result.reasons).toContain("RHR up 11.7 bpm vs baseline");
+  });
+
   it("all 4 signals → triggered with 4 reasons", () => {
     const trends: Trends = {
       hrv_baseline_7day: 50,
