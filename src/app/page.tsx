@@ -1,4 +1,8 @@
-import { listBiometricSnapshots, listBodyMeasurements } from "@/lib/kv";
+import {
+  listBiometricSnapshots,
+  listBodyMeasurements,
+  isSkipped,
+} from "@/lib/kv";
 import { computeTrends } from "@/lib/trends";
 import { computeStreaks } from "@/lib/streak";
 import type { BiometricSnapshot } from "@/lib/whoop";
@@ -181,11 +185,19 @@ export default async function Page({ searchParams }: Props) {
   const metrics = toMetrics(snaps30);
   const pa = polarizedAnalysis(metrics);
 
-  // Build skip map for streaks
+  // Build skip map for streaks — must query the actual skipped:${date} keys,
+  // not infer from biometric snapshots (which are independent).
   const skipMap: Record<string, boolean> = {};
-  for (const snap of snaps60) {
-    skipMap[snap.date] = false; // present in KV = not skipped (skip flag is separate)
-  }
+  await Promise.all(
+    Array.from({ length: 60 }, (_, i) => {
+      const d = new Date();
+      d.setUTCDate(d.getUTCDate() - i);
+      const date = d.toISOString().slice(0, 10);
+      return isSkipped(date).then((v) => {
+        skipMap[date] = v;
+      });
+    }),
+  );
   const streaks = computeStreaks(snaps30, skipMap);
 
   // Today's snapshot
