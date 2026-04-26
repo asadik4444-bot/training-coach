@@ -38,10 +38,11 @@ export async function exchangeCodeForTokens(
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body,
   });
-  if (!res.ok)
-    throw new Error(
-      `Whoop token exchange failed: ${res.status} ${await res.text()}`,
-    );
+  if (!res.ok) {
+    const status = res.status;
+    const body = await res.text();
+    throw Object.assign(new Error("whoop upstream error"), { status, body });
+  }
   return (await res.json()) as TokenResponse;
 }
 
@@ -83,8 +84,11 @@ export async function refreshAccessToken(): Promise<string> {
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body,
   });
-  if (!res.ok)
-    throw new Error(`Whoop refresh failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    const status = res.status;
+    const body = await res.text();
+    throw Object.assign(new Error("whoop upstream error"), { status, body });
+  }
   const data = (await res.json()) as TokenResponse;
   // Whoop returns a new refresh_token each time; persist it
   await withRetry(() => saveRefreshToken(data.refresh_token));
@@ -260,8 +264,9 @@ async function fetchAllPages<T>(
     const url = `${WHOOP_API}${path}?${params.toString()}`;
     const res = await fetch(url, { headers });
     if (!res.ok) {
+      const status = res.status;
       const body = await res.text();
-      throw new Error(`Whoop ${path} ${res.status}: ${body.slice(0, 200)}`);
+      throw Object.assign(new Error("whoop upstream error"), { status, body });
     }
     const data = (await res.json()) as { records?: T[]; next_token?: string };
     const records = data.records ?? [];

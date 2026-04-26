@@ -32,6 +32,19 @@ const WEEKDAY_NAMES = [
   "saturday",
 ];
 
+function getWhoopUpstreamError(
+  e: unknown,
+): { status: number; body: string } | null {
+  if (!(e instanceof Error) || e.message !== "whoop upstream error") {
+    return null;
+  }
+  const maybe = e as Error & { status?: unknown; body?: unknown };
+  if (typeof maybe.status !== "number" || typeof maybe.body !== "string") {
+    return null;
+  }
+  return { status: maybe.status, body: maybe.body };
+}
+
 export async function GET(req: NextRequest) {
   const expected = process.env.CRON_SECRET;
   if (!expected) {
@@ -206,6 +219,18 @@ export async function GET(req: NextRequest) {
       sent: finalText,
     });
   } catch (e) {
+    const whoopError = getWhoopUpstreamError(e);
+    if (whoopError) {
+      const { status, body } = whoopError;
+      console.error("whoop upstream error", {
+        status,
+        bodyPreview: body.slice(0, 500),
+      });
+      return NextResponse.json(
+        { error: "whoop upstream error", status },
+        { status: 502 },
+      );
+    }
     const msg = String(e);
     try {
       await sendTelegram(`⚠️ training-coach cron error: ${msg.slice(0, 300)}`);
