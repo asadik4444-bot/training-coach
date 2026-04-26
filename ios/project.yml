@@ -57,6 +57,12 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: Sources/TrainingCoachWidget
+      - path: Sources/TrainingCoach/Theme
+      - path: Sources/TrainingCoach/Models
+      - path: Sources/TrainingCoach/Networking
+      - path: Sources/TrainingCoach/Auth
+      - path: Sources/TrainingCoach/Common
+      - path: Sources/TrainingCoach/LiveActivity
       - path: Resources
         buildPhase: resources
     dependencies:

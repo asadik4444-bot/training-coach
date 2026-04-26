@@ -1,39 +1,41 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(AuthState.self) private var auth
+
     var body: some View {
         TabView {
-            Text("Today")
+            TodayView()
                 .tabItem {
                     Label("Today", systemImage: "sun.max")
                 }
 
-            Text("Trends")
+            TrendsView()
                 .tabItem {
                     Label("Trends", systemImage: "chart.line.uptrend.xyaxis")
                 }
 
-            Text("Heatmap")
+            HeatmapView()
                 .tabItem {
                     Label("Heatmap", systemImage: "square.grid.3x3")
                 }
 
-            Text("Goals")
+            GoalsView()
                 .tabItem {
                     Label("Goals", systemImage: "target")
                 }
 
-            Text("Body")
+            BodyView()
                 .tabItem {
                     Label("Body", systemImage: "figure")
                 }
 
-            Text("Workouts")
+            WorkoutsView()
                 .tabItem {
                     Label("Workouts", systemImage: "dumbbell")
                 }
 
-            Text("Settings")
+            SettingsView()
                 .tabItem {
                     Label("Settings", systemImage: "gearshape")
                 }
@@ -44,4 +46,5 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
+        .environment(AuthState())
 }
