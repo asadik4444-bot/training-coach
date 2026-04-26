@@ -19,6 +19,7 @@ import { classifyRecovery } from "@/lib/recovery";
 import StickyToday from "@/components/StickyToday";
 import Heatmap from "@/components/Heatmap";
 import TrendChart from "@/components/TrendChart";
+import PullToRefresh from "@/components/PullToRefresh";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -512,9 +513,17 @@ export default async function Page({ searchParams }: Props) {
   // Polarized note
   const paRatio = pa.ratio != null ? pa.ratio.toFixed(2) : "∞";
 
+  // Last-update timestamp (server render time in Zurich)
+  const updatedAt = new Date().toLocaleTimeString("en-CH", {
+    timeZone: "Europe/Zurich",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
   return (
     <>
       {/* page-level style block removed — global tokens are in layout.tsx */}
+      <PullToRefresh />
 
       <div
         style={{
@@ -529,7 +538,7 @@ export default async function Page({ searchParams }: Props) {
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
-            marginBottom: "1rem",
+            marginBottom: "0.35rem",
           }}
         >
           <h1
@@ -546,6 +555,17 @@ export default async function Page({ searchParams }: Props) {
           <span style={{ color: "var(--text-dim)", fontSize: "0.75rem" }}>
             {todayISO}
           </span>
+        </div>
+        {/* Last-update timestamp */}
+        <div
+          style={{
+            fontSize: "0.68rem",
+            color: "var(--text-dim)",
+            marginBottom: "0.75rem",
+            letterSpacing: "0.03em",
+          }}
+        >
+          Updated {updatedAt}
         </div>
 
         {/* TODAY hero — sticky wrapper collapses on scroll */}
