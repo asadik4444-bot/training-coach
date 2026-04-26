@@ -14,6 +14,11 @@ import {
   handleRecent,
   handleBackfill,
   handleSetup,
+  handleWeight,
+  handleWaist,
+  handleBody,
+  handleStreak,
+  handleCalendar,
 } from "@/lib/commands";
 import { sendTelegram } from "@/lib/telegram";
 
@@ -93,6 +98,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     reply = await handleBackfill();
   } else if (cmd === "/setup") {
     reply = await handleSetup();
+  } else if (cmd === "/weight" && arg1) {
+    reply = await handleWeight(normalized.slice("/weight ".length), todayISO);
+  } else if (cmd === "/weight") {
+    reply = await handleWeight("", todayISO);
+  } else if (cmd === "/waist" && arg1) {
+    reply = await handleWaist(normalized.slice("/waist ".length), todayISO);
+  } else if (cmd === "/waist") {
+    reply = await handleWaist("", todayISO);
+  } else if (cmd === "/body") {
+    reply = await handleBody(parsePosInt(arg1, 30));
+  } else if (cmd === "/streak") {
+    reply = await handleStreak(todayISO);
+  } else if (cmd === "/calendar") {
+    reply = await handleCalendar();
   } else {
     reply = await handleHelp();
   }
