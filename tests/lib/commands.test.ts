@@ -288,6 +288,25 @@ describe("handleReport", () => {
     expect(reply).toContain("Monthly breakdown");
     expect(reply).toContain("2026-0");
   });
+
+  it("week report shows prior-period comparison column when prior data exists", async () => {
+    // Build 14 days of data: current 7 days (recovery 70) + prior 7 days (recovery 60)
+    const snaps: BiometricSnapshot[] = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date();
+      d.setUTCDate(d.getUTCDate() - i);
+      const score = i < 7 ? 70 : 60; // current period higher
+      return {
+        date: d.toISOString().slice(0, 10),
+        recovery: { status: "scored" as const, score, hrv_rmssd_ms: 40 },
+      };
+    });
+    vi.mocked(listBiometricSnapshots).mockResolvedValue(snaps);
+    const reply = await handleReport("week", TODAY);
+    expect(reply).toContain("Current");
+    expect(reply).toContain("Previous");
+    // Should show positive delta since current recovery > prior
+    expect(reply).toMatch(/\+/);
+  });
 });
 
 describe("handleRecent", () => {

@@ -321,6 +321,13 @@ export async function handleLoad(todayISO: string): Promise<string> {
 
 // ── /report ───────────────────────────────────────────────────────────────────
 
+/** Format a delta as "+N" / "-N" with optional unit. */
+function fmtDelta(curr: number | null, prev: number | null): string {
+  if (curr == null || prev == null) return "";
+  const d = curr - prev;
+  return (d >= 0 ? "+" : "") + d.toFixed(1);
+}
+
 export async function handleReport(
   window: "week" | "month" | "year",
   todayISO: string,
@@ -328,7 +335,22 @@ export async function handleReport(
   const daysMap = { week: 7, month: 30, year: 365 };
   const daysBack = daysMap[window];
 
-  const raw = (await listBiometricSnapshots(daysBack)) as BiometricSnapshot[];
+  // For week/month: fetch 2x days so we can compute prior period too
+  const fetchDays = window === "year" ? daysBack : daysBack * 2;
+  const allRaw = (await listBiometricSnapshots(
+    fetchDays,
+  )) as BiometricSnapshot[];
+
+  // Compute cutoff: current period = last daysBack days
+  const today = new Date(todayISO + "T00:00:00Z");
+  const cutoff = new Date(today);
+  cutoff.setUTCDate(cutoff.getUTCDate() - daysBack);
+  const cutoffISO = cutoff.toISOString().slice(0, 10);
+
+  const currentRaw = allRaw.filter((s) => s.date > cutoffISO);
+  const priorRaw = allRaw.filter((s) => s.date <= cutoffISO);
+
+  const raw = window === "year" ? allRaw : currentRaw;
   const metrics = toMetrics(raw);
 
   if (metrics.length === 0) {
@@ -342,38 +364,83 @@ export async function handleReport(
   const strainSum = summarize(metrics, "strain");
   const pa = polarizedAnalysis(metrics);
 
+  // Prior period summaries (only for week/month)
+  const hasPrior = window !== "year" && priorRaw.length > 0;
+  const priorMetrics = hasPrior ? toMetrics(priorRaw) : [];
+  const pRec = hasPrior ? summarize(priorMetrics, "recovery") : null;
+  const pHrv = hasPrior ? summarize(priorMetrics, "hrv") : null;
+  const pRhr = hasPrior ? summarize(priorMetrics, "rhr") : null;
+  const pSleep = hasPrior ? summarize(priorMetrics, "sleep_eff") : null;
+  const pStrain = hasPrior ? summarize(priorMetrics, "strain") : null;
+
   const lines: string[] = [
     `📊 ${window.charAt(0).toUpperCase() + window.slice(1)} report (${daysBack} days)`,
-    "",
   ];
 
+  if (hasPrior) {
+    lines.push("         Current  Previous    Δ");
+  }
+  lines.push("");
+
   if (recSum.count > 0) {
-    lines.push(
-      `Recovery:  avg ${recSum.avg?.toFixed(0) ?? "?"}%  ${recSum.spark}`,
-    );
+    const curr = recSum.avg?.toFixed(0) ?? "?";
+    if (hasPrior && pRec && pRec.count > 0) {
+      const prev = pRec.avg?.toFixed(0) ?? "?";
+      const d = fmtDelta(recSum.avg, pRec.avg);
+      lines.push(`Recovery:  ${curr.padStart(6)}%  ${prev.padStart(7)}%  ${d}`);
+    } else {
+      lines.push(`Recovery:  avg ${curr}%  ${recSum.spark}`);
+    }
   }
   if (hrvSum.count > 0) {
-    lines.push(
-      `HRV:       avg ${hrvSum.avg?.toFixed(1) ?? "?"} ms  ${hrvSum.spark}`,
-    );
+    const curr = hrvSum.avg?.toFixed(1) ?? "?";
+    if (hasPrior && pHrv && pHrv.count > 0) {
+      const prev = pHrv.avg?.toFixed(1) ?? "?";
+      const d = fmtDelta(hrvSum.avg, pHrv.avg);
+      lines.push(`HRV:       ${curr.padStart(6)}ms ${prev.padStart(7)}ms ${d}`);
+    } else {
+      lines.push(`HRV:       avg ${curr} ms  ${hrvSum.spark}`);
+    }
   }
   if (rhrSum.count > 0) {
-    lines.push(
-      `RHR:       avg ${rhrSum.avg?.toFixed(0) ?? "?"} bpm  ${rhrSum.spark}`,
-    );
+    const curr = rhrSum.avg?.toFixed(0) ?? "?";
+    if (hasPrior && pRhr && pRhr.count > 0) {
+      const prev = pRhr.avg?.toFixed(0) ?? "?";
+      const d = fmtDelta(rhrSum.avg, pRhr.avg);
+      lines.push(
+        `RHR:       ${curr.padStart(5)}bpm  ${prev.padStart(6)}bpm  ${d}`,
+      );
+    } else {
+      lines.push(`RHR:       avg ${curr} bpm  ${rhrSum.spark}`);
+    }
   }
   if (sleepSum.count > 0) {
-    lines.push(
-      `Sleep eff: avg ${sleepSum.avg?.toFixed(0) ?? "?"}%  ${sleepSum.spark}`,
-    );
+    const curr = sleepSum.avg?.toFixed(0) ?? "?";
+    if (hasPrior && pSleep && pSleep.count > 0) {
+      const prev = pSleep.avg?.toFixed(0) ?? "?";
+      const d = fmtDelta(sleepSum.avg, pSleep.avg);
+      lines.push(`Sleep eff: ${curr.padStart(6)}%  ${prev.padStart(7)}%  ${d}`);
+    } else {
+      lines.push(`Sleep eff: avg ${curr}%  ${sleepSum.spark}`);
+    }
   }
   if (strainSum.count > 0) {
     const totalStrain = metrics
       .map((m) => m.strain ?? 0)
       .reduce((a, b) => a + b, 0);
-    lines.push(
-      `Strain:    total ${totalStrain.toFixed(1)}, avg/day ${strainSum.avg?.toFixed(1) ?? "?"}`,
-    );
+    if (hasPrior && pStrain && pStrain.count > 0) {
+      const prevTotal = priorMetrics
+        .map((m) => m.strain ?? 0)
+        .reduce((a, b) => a + b, 0);
+      const d = fmtDelta(totalStrain, prevTotal);
+      lines.push(
+        `Strain:    total ${totalStrain.toFixed(1)} / prev ${prevTotal.toFixed(1)} (${d})`,
+      );
+    } else {
+      lines.push(
+        `Strain:    total ${totalStrain.toFixed(1)}, avg/day ${strainSum.avg?.toFixed(1) ?? "?"}`,
+      );
+    }
   }
 
   // ACWR for week/month only
