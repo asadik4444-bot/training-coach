@@ -1,5 +1,7 @@
 # training-coach
 
+**v4 — analytics console + 90-day backfill** | [live](https://training-coach-phi.vercel.app)
+
 Personal training assistant: fetches WHOOP recovery each morning and sends a Telegram message with the day's plan, adjusted for how recovered you are.
 
 ---
