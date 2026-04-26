@@ -87,5 +87,11 @@ export async function fetchLatestRecovery(
   const records = data.records ?? [];
   if (records.length === 0)
     throw new Error("No recovery records returned by Whoop");
-  return Math.round(records[0].score?.recovery_score ?? 0);
+  const score = records[0].score?.recovery_score;
+  if (score == null) {
+    throw new Error(
+      "Whoop recovery score not yet available — retry after sync",
+    );
+  }
+  return Math.round(score);
 }
