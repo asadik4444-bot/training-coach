@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDailyLog, isSkipped, getSwap, getRecoverySnapshot } from "@/lib/kv";
+import {
+  getDailyLog,
+  isSkipped,
+  getSwap,
+  getRecoverySnapshot,
+  listBiometricSnapshots,
+} from "@/lib/kv";
 import { sendTelegram } from "@/lib/telegram";
+import { computeTrends } from "@/lib/trends";
+import type { BiometricSnapshot } from "@/lib/whoop";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -49,6 +57,63 @@ export async function GET(req: NextRequest) {
   lines.push(`Skipped: ${skipped}`);
   lines.push(`Swapped: ${swaps}`);
   lines.push(`Logged entries: ${logEntries}`);
+
+  // ── Biometric trends (28-day window) ──────────────────────────────────────
+  try {
+    const rawSnaps = await listBiometricSnapshots(28);
+    const snaps = rawSnaps as BiometricSnapshot[];
+    const trends = computeTrends(snaps);
+
+    lines.push("");
+    lines.push("📈 Biometric trends (28-day window)");
+
+    if (trends.hrv_baseline_7day !== null) {
+      const baseline = Math.round(trends.hrv_baseline_7day);
+      const delta =
+        trends.hrv_today_vs_baseline_pct !== null
+          ? ` (today ${trends.hrv_today_vs_baseline_pct >= 0 ? "+" : ""}${Math.round(trends.hrv_today_vs_baseline_pct)}%)`
+          : "";
+      lines.push(`HRV 7-day baseline: ${baseline} ms${delta}`);
+    }
+
+    if (trends.rhr_baseline_7day !== null) {
+      const baseline = Math.round(trends.rhr_baseline_7day);
+      const delta =
+        trends.rhr_today_vs_baseline_bpm !== null
+          ? ` (today ${trends.rhr_today_vs_baseline_bpm >= 0 ? "+" : ""}${Math.round(trends.rhr_today_vs_baseline_bpm)} bpm)`
+          : "";
+      lines.push(`RHR 7-day baseline: ${baseline} bpm${delta}`);
+    }
+
+    if (trends.sleep_efficiency_avg_7day !== null) {
+      lines.push(
+        `Avg sleep efficiency (7d): ${Math.round(trends.sleep_efficiency_avg_7day)}%`,
+      );
+    }
+
+    if (trends.sleep_debt_min_7day !== null) {
+      const debtH = (trends.sleep_debt_min_7day / 60).toFixed(1);
+      lines.push(`Sleep debt (7d vs 8h target): ${debtH}h`);
+    }
+
+    if (trends.acwr !== null) {
+      const acwr = trends.acwr.toFixed(2);
+      let interpretation: string;
+      if (trends.acwr < 0.8) {
+        interpretation = "detraining";
+      } else if (trends.acwr <= 1.3) {
+        interpretation = "sweet spot";
+      } else if (trends.acwr <= 1.5) {
+        interpretation = "high — consider deload soon";
+      } else {
+        interpretation = "overreaching risk — deload this week";
+      }
+      lines.push(`ACWR: ${acwr} (${interpretation})`);
+    }
+  } catch {
+    // trends section is non-critical; omit silently
+  }
+
   lines.push("");
   lines.push("Sunday ritual: open ~/training-coach in Claude Code and ask:");
   lines.push(
