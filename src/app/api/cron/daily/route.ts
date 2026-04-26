@@ -10,6 +10,8 @@ import {
   setRecoverySnapshot,
   setBiometricSnapshot,
   listBiometricSnapshots,
+  getPainEntries,
+  appendToArchive,
 } from "@/lib/kv";
 import { computeTrends } from "@/lib/trends";
 import { computeStreaks } from "@/lib/streak";
@@ -85,12 +87,20 @@ export async function GET(req: NextRequest) {
     const rawSnaps = await listBiometricSnapshots(28);
     const trends = computeTrends(rawSnaps as BiometricSnapshot[]);
 
-    // Science-grounded decision
+    // Fetch today's max pain severity for the pain gate
+    const painEntries = await getPainEntries(todayISO);
+    const maxPainSeverity =
+      painEntries.length > 0
+        ? Math.max(...painEntries.map((e) => e.severity))
+        : undefined;
+
+    // Science-grounded decision (includes pain gate)
     const decision = decideToday(
       snapshot.recovery.status,
       snapshot.recovery.score ?? null,
       snapshot.recovery.hrv_rmssd_ms ?? null,
       trends,
+      maxPainSeverity,
     );
 
     // Deload detection — prepend warning if 2+ chronic overreaching signals
@@ -171,6 +181,23 @@ export async function GET(req: NextRequest) {
         { text: "Swap to Wed", callback_data: "swap:wednesday" },
       ],
     ]);
+
+    // Durable archive append (no TTL — escapes 90d Redis TTL)
+    const monthKey = todayISO.slice(0, 7); // YYYY-MM
+    await appendToArchive(monthKey, {
+      date: todayISO,
+      snapshot: {
+        recovery: snapshot.recovery,
+        sleep: snapshot.sleep,
+        last_workout: snapshot.last_workout,
+      },
+      decision: {
+        band: decision.band,
+        reason: decision.reason,
+        hard_stop: decision.hard_stop,
+        intensity_multiplier: decision.intensity_multiplier,
+      },
+    });
 
     return NextResponse.json({
       ok: true,

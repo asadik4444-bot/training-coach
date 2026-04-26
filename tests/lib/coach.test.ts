@@ -281,3 +281,47 @@ describe("detectDeloadNeed", () => {
     expect(result.reasons.some((r) => r.includes("Sleep debt"))).toBe(false);
   });
 });
+
+// ── Pain gate ─────────────────────────────────────────────────────────────────
+
+describe("decideToday — pain gate", () => {
+  it("pain >= 8 → hard_stop red regardless of recovery score", () => {
+    const result = decideToday("scored", 90, 60, NULL_TRENDS, 8);
+    expect(result.band).toBe("red");
+    expect(result.hard_stop).toBe(true);
+    expect(result.intensity_multiplier).toBe(0);
+    expect(result.reason).toContain("Pain 8/10");
+  });
+
+  it("pain = 10 → hard_stop red", () => {
+    const result = decideToday("scored", 85, 55, NULL_TRENDS, 10);
+    expect(result.hard_stop).toBe(true);
+    expect(result.band).toBe("red");
+  });
+
+  it("pain = 6 with green recovery → downgrade to yellow", () => {
+    const result = decideToday("scored", 80, null, NULL_TRENDS, 6);
+    expect(result.band).toBe("yellow");
+    expect(result.hard_stop).toBe(false);
+    expect(result.flags.some((f) => f.includes("Pain 6/10"))).toBe(true);
+  });
+
+  it("pain = 7 with yellow recovery → stays yellow (pain flag added)", () => {
+    const result = decideToday("scored", 50, null, NULL_TRENDS, 7);
+    expect(result.band).toBe("yellow");
+    expect(result.flags.some((f) => f.includes("Pain 7/10"))).toBe(true);
+  });
+
+  it("no pain parameter → normal decision (green)", () => {
+    const result = decideToday("scored", 85, null, NULL_TRENDS);
+    expect(result.band).toBe("green");
+    expect(result.hard_stop).toBe(false);
+  });
+
+  it("pain = 5 → no downgrade, no pain flag", () => {
+    const result = decideToday("scored", 80, null, NULL_TRENDS, 5);
+    // Pain <6 should not trigger any pain gate
+    expect(result.band).toBe("green");
+    expect(result.flags.every((f) => !f.includes("Pain"))).toBe(true);
+  });
+});

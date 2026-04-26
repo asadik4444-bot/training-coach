@@ -13,7 +13,7 @@ export interface DailyDecision {
 
 /**
  * Pure decision engine — no side effects. Returns a recommendation based on
- * HRV trend, Whoop recovery score, and ACWR/sleep advisory signals.
+ * HRV trend, Whoop recovery score, ACWR/sleep advisory signals, and pain.
  *
  * Apply rules in order; stop at first match for band determination.
  */
@@ -22,6 +22,7 @@ export function decideToday(
   recoveryScore: number | null, // 0-100 if scored, else null
   todayHrvMs: number | null, // today's HRV in ms
   trends: Trends, // from computeTrends — has 7-day baselines
+  painSeverity?: number, // optional: max pain severity today (1-10)
 ): DailyDecision {
   // Build advisory flags (applied regardless of band)
   const flags: string[] = [];
@@ -40,6 +41,19 @@ export function decideToday(
     flags.push(
       `Sleep debt ${Math.round(trends.sleep_debt_min_7day)}min over last 7 days`,
     );
+  }
+
+  // ── Rule 0: Pain gate ────────────────────────────────────────────────────────
+  // Hard-stop if pain >= 8; downgrade band if pain >= 6
+  if (painSeverity !== undefined && painSeverity >= 8) {
+    return {
+      band: "red",
+      emoji: "🔴",
+      reason: `Pain ${painSeverity}/10 — hard stop, defer all training`,
+      hard_stop: true,
+      intensity_multiplier: 0,
+      flags: [...flags, `Pain ${painSeverity}/10 — defer hard work`],
+    };
   }
 
   // ── Rule 1: Hard-stop (BOTH autonomic signals critical) ────────────────────
@@ -123,6 +137,18 @@ export function decideToday(
     emoji = "🟡";
     reason = "Recovery green but HRV 15% below baseline — easing off.";
     intensityMultiplier = 0.7;
+  }
+
+  // ── Rule 6: Pain downgrade (moderate) ──────────────────────────────────────
+  // Pain 6-7: downgrade green → yellow or yellow → yellow (add flag)
+  if (painSeverity !== undefined && painSeverity >= 6) {
+    if (band === "green") {
+      band = "yellow";
+      emoji = "🟡";
+      reason = `Pain ${painSeverity}/10 — downgrading from green, defer hard work`;
+      intensityMultiplier = 0.7;
+    }
+    flags.push(`Pain ${painSeverity}/10 — defer hard work`);
   }
 
   return {
