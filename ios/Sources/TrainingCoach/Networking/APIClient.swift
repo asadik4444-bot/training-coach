@@ -40,9 +40,16 @@ actor APIClient {
     }
 
     func getExport() async throws -> Data {
-        try await authenticateIfNeeded()
-
-        return try await data(for: url(pathComponents: ["api", "export"]))
+        // /api/export only accepts ?key= query auth (not cookie). Skip ensureAuth.
+        guard let secret = await secretProvider() else {
+            throw APIError.notConfigured
+        }
+        return try await data(
+            for: url(
+                pathComponents: ["api", "export"],
+                queryItems: [URLQueryItem(name: "key", value: secret)]
+            )
+        )
     }
 
     func ensureAuth() async throws {

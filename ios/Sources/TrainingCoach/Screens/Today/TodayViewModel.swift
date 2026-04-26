@@ -22,6 +22,9 @@ final class TodayViewModel {
             let todayEntry = decoded.entries.first(where: { $0.date == String(today) })
 
             state = .success(TodayData(day: day, decision: todayEntry?.decision, hrvSparkline: hrvTrend))
+        } catch let api as APIError {
+            let status: Int? = if case .upstream(let s) = api { s } else { nil }
+            state = .error(AppError(message: api.localizedDescription, statusCode: status))
         } catch {
             state = .error(.network(error.localizedDescription))
         }
