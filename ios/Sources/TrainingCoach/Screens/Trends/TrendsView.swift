@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct TrendsView: View {
     @State private var vm = TrendsViewModel()
@@ -9,7 +10,13 @@ struct TrendsView: View {
                 .ignoresSafeArea()
 
             ScrollView {
-                VStack(spacing: 18) {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("TRENDS")
+                        .font(.firaSans(28, weight: .bold))
+                        .foregroundStyle(Color.text)
+                        .tracking(1.5)
+                        .accessibilityAddTraits(.isHeader)
+
                     WindowPicker(selection: $vm.window)
 
                     content
@@ -18,7 +25,9 @@ struct TrendsView: View {
                 .padding(.vertical, 18)
             }
             .refreshable {
+                impact()
                 await vm.load()
+                impact()
             }
         }
         .task {
@@ -178,9 +187,15 @@ struct TrendsView: View {
     }
 
     private func reload() {
+        impact()
         Task {
             await vm.load()
+            impact()
         }
+    }
+
+    private func impact() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 }
 

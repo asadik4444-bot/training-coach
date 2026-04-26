@@ -12,6 +12,7 @@ struct MetricCard: View {
     let placeholder: String
     let valueFormat: FloatingPointFormatStyle<Double>
     let accessibilityLabelText: String
+    var placeholderStyle: MetricPlaceholderStyle = .message
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .largeTitle) private var valueSize: CGFloat = 34
@@ -22,10 +23,11 @@ struct MetricCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .firstTextBaseline) {
-                Text(label)
-                    .font(.firaSans(13, weight: .semibold))
+                Text(label.uppercased())
+                    .font(.firaSans(11, weight: .semibold))
                     .foregroundStyle(Color.textMuted)
-                    .textCase(.uppercase)
+                    .kerning(1.4)
+                    .lineLimit(1)
 
                 Spacer(minLength: 12)
 
@@ -48,9 +50,15 @@ struct MetricCard: View {
                     Text(unit)
                         .font(.firaSans(unitSize, weight: .medium))
                         .foregroundStyle(Color.textMuted)
+                } else if placeholderStyle == .dash {
+                    Text("—")
+                        .font(.firaCode(valueSize, weight: .medium).monospacedDigit())
+                        .foregroundStyle(Color.textDim)
+                        .lineLimit(1)
+                        .accessibilityLabel("No value")
                 } else {
                     Text(placeholder)
-                        .font(.body)
+                        .font(.firaSans(14))
                         .foregroundStyle(Color.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -67,6 +75,7 @@ struct MetricCard: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.border.opacity(0.8), lineWidth: 1)
         }
+        .shadow(color: color.opacity(reduceMotion ? 0.08 : 0.16), radius: reduceMotion ? 8 : 16, y: reduceMotion ? 3 : 8)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabelText)
         .accessibilityValue(accessibilityValue)
@@ -150,6 +159,11 @@ enum MetricTrendPreference: Sendable {
     }
 }
 
+enum MetricPlaceholderStyle: Sendable {
+    case message
+    case dash
+}
+
 private struct DeltaBadge: View {
     let delta: Double?
     let unit: String
@@ -158,7 +172,7 @@ private struct DeltaBadge: View {
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: deltaIcon)
-                .font(.caption.weight(.bold))
+                .font(.system(size: 11, weight: .bold))
                 .accessibilityHidden(true)
 
             Text(deltaText)
@@ -186,9 +200,8 @@ private struct DeltaBadge: View {
             return "No WoW"
         }
 
-        let arrow = delta >= 0 ? "↑" : "↓"
         let amount = abs(delta).formatted(.number.precision(.fractionLength(1)))
-        return "\(arrow) \(amount) \(unit)"
+        return "\(amount) \(unit)"
     }
 
     private var deltaColor: Color {
@@ -234,6 +247,7 @@ private struct Sparkline: View {
             }
             .chartXAxis(.hidden)
             .chartYAxis(.hidden)
+            .font(.firaCode(10, weight: .medium))
             .chartPlotStyle { plotArea in
                 plotArea
                     .background(Color.white.opacity(0.02))
@@ -245,7 +259,7 @@ private struct Sparkline: View {
                 .fill(Color.white.opacity(0.04))
                 .overlay {
                     Text("No trend yet")
-                        .font(.caption)
+                        .font(.firaCode(11, weight: .medium))
                         .foregroundStyle(Color.textDim)
                 }
                 .accessibilityHidden(true)

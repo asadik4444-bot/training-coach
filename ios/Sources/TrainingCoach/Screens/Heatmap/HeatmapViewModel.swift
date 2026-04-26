@@ -31,16 +31,22 @@ final class HeatmapViewModel {
     }
 
     private func buildHeatmapData(from response: ExportResponse) -> HeatmapData {
-        let calendar = Calendar.current
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        calendar.firstWeekday = 2
+
         let today = calendar.startOfDay(for: Date())
-        let startDate = calendar.date(byAdding: .day, value: -89, to: today) ?? today
+        let rawStartDate = calendar.date(byAdding: .day, value: -89, to: today) ?? today
+        let daysFromMonday = (calendar.component(.weekday, from: rawStartDate) + 5) % 7
+        let startDate = calendar.date(byAdding: .day, value: -daysFromMonday, to: rawStartDate) ?? rawStartDate
+        let dayCount = max(calendar.dateComponents([.day], from: startDate, to: today).day ?? 89, 0) + 1
 
         var entriesByDate: [String: ExportEntry] = [:]
         for entry in response.entries {
             entriesByDate[entry.date] = entry
         }
 
-        let cells = (0..<90).compactMap { offset -> HeatmapCell? in
+        let cells = (0..<dayCount).compactMap { offset -> HeatmapCell? in
             guard let date = calendar.date(byAdding: .day, value: offset, to: startDate) else {
                 return nil
             }

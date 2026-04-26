@@ -17,13 +17,17 @@ final class SettingsViewModel {
     }
 
     var lastUpdateText: String {
+        lastUpdateText(relativeTo: Date())
+    }
+
+    func lastUpdateText(relativeTo date: Date) -> String {
         guard let lastUpdate else {
             return "Never"
         }
 
         let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .short
-        return formatter.localizedString(for: lastUpdate, relativeTo: Date())
+        formatter.unitsStyle = .full
+        return formatter.localizedString(for: lastUpdate, relativeTo: date)
     }
 
     func signOut() {

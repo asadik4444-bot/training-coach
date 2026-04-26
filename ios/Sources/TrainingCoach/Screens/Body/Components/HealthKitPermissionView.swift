@@ -7,21 +7,34 @@ struct HealthKitPermissionView: View {
     let requestAccess: () async throws -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @ScaledMetric(relativeTo: .largeTitle) private var iconSize: CGFloat = 48
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .largeTitle) private var iconSize: CGFloat = 70
 
     @State private var isRequesting = false
     @State private var errorMessage: String?
 
     var body: some View {
-        VStack(spacing: 22) {
-            Image(systemName: "heart.text.square.fill")
-                .font(.system(size: iconSize, weight: .semibold))
-                .foregroundStyle(Color.recoveryGreen)
-                .accessibilityHidden(true)
+        VStack(spacing: 24) {
+            ZStack {
+                Circle()
+                    .fill(Color.recoveryGreen.opacity(0.14))
+                    .frame(width: iconSize + 42, height: iconSize + 42)
+                    .shadow(
+                        color: Color.recoveryGreen.opacity(reduceMotion ? 0.16 : 0.32),
+                        radius: reduceMotion ? 10 : 26,
+                        y: reduceMotion ? 2 : 8
+                    )
+
+                Image(systemName: "heart.text.square.fill")
+                    .font(.system(size: iconSize, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(Color.recoveryGreen)
+                    .accessibilityHidden(true)
+            }
 
             VStack(spacing: 10) {
-                Text("HealthKit access")
-                    .font(.firaSans(24, weight: .bold))
+                Text("HealthKit Access")
+                    .font(.firaSans(28, weight: .bold))
                     .foregroundStyle(Color.text)
                     .multilineTextAlignment(.center)
 
@@ -49,7 +62,7 @@ struct HealthKitPermissionView: View {
             }
 
             Button(action: grantAccess) {
-                Label(isRequesting ? "Requesting" : "Grant Access", systemImage: "heart.text.square.fill")
+                Label(isRequesting ? "Requesting" : buttonTitle, systemImage: "heart.text.square.fill")
                     .font(.firaSans(17, weight: .semibold))
                     .frame(maxWidth: .infinity, minHeight: 54)
             }
@@ -57,13 +70,29 @@ struct HealthKitPermissionView: View {
             .foregroundStyle(Color.text)
             .background(Color.primary)
             .clipShape(Capsule())
+            .shadow(color: Color.primaryLight.opacity(reduceMotion ? 0.16 : 0.34), radius: reduceMotion ? 8 : 18, y: 6)
             .disabled(isRequesting)
             .opacity(isRequesting ? 0.65 : 1)
             .accessibilityHint(status == .sharingDenied ? "Opens Settings." : "Shows the HealthKit permission sheet.")
         }
         .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.bg.ignoresSafeArea())
+        .background(
+            LinearGradient(
+                colors: [
+                    Color.bg,
+                    Color.bgCard.opacity(0.96),
+                    Color.bgSurface.opacity(0.9)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+        )
+    }
+
+    private var buttonTitle: String {
+        status == .sharingAuthorized ? "Done" : "Grant Health Access"
     }
 
     private var message: String {
@@ -80,6 +109,11 @@ struct HealthKitPermissionView: View {
     }
 
     private func grantAccess() {
+        if status == .sharingAuthorized {
+            dismiss()
+            return
+        }
+
         if status == .sharingDenied,
            let settingsURL = URL(string: UIApplication.openSettingsURLString) {
             UIApplication.shared.open(settingsURL)

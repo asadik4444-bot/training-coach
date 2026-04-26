@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct WorkoutsView: View {
     @State private var viewModel = WorkoutsViewModel()
@@ -27,7 +28,7 @@ struct WorkoutsView: View {
             .background(Color.bg)
             .environment(\.defaultMinListRowHeight, 1)
             .refreshable {
-                await viewModel.load()
+                await refresh()
             }
             .task {
                 await viewModel.load()
@@ -64,13 +65,7 @@ struct WorkoutsView: View {
     }
 
     private var emptyRow: some View {
-        WorkoutsStateRow(
-            systemImage: "dumbbell.fill",
-            title: "No workouts yet.",
-            message: "Sync from Whoop to see history.",
-            actionTitle: "Refresh",
-            retry: reload
-        )
+        WorkoutsEmptyRow()
         .listRowInsets(EdgeInsets(top: 80, leading: 24, bottom: 24, trailing: 24))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.bg)
@@ -105,8 +100,9 @@ struct WorkoutsView: View {
                 }
             } header: {
                 Text(section.title)
-                    .font(.firaSans(12, weight: .semibold))
+                    .font(.firaSans(11, weight: .semibold))
                     .foregroundStyle(Color.textMuted)
+                    .kerning(1.5)
                     .textCase(nil)
                     .padding(.top, 8)
                     .accessibilityAddTraits(.isHeader)
@@ -118,6 +114,14 @@ struct WorkoutsView: View {
         Task {
             await viewModel.load()
         }
+    }
+
+    private func refresh() async {
+        await MainActor.run {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+
+        await viewModel.load()
     }
 
     private func sections(from items: [WorkoutItem]) -> [WorkoutWeekSection] {
@@ -148,12 +152,12 @@ struct WorkoutsView: View {
         }
 
         if calendar.isDate(weekStart, inSameDayAs: thisWeek.start) {
-            return "This week"
+            return "THIS WEEK"
         }
 
         if let lastWeekStart = calendar.date(byAdding: .weekOfYear, value: -1, to: thisWeek.start),
            calendar.isDate(weekStart, inSameDayAs: lastWeekStart) {
-            return "Last week"
+            return "LAST WEEK"
         }
 
         return weekRangeTitle(startingAt: weekStart, calendar: calendar)
@@ -162,11 +166,58 @@ struct WorkoutsView: View {
     private func weekRangeTitle(startingAt start: Date, calendar: Calendar) -> String {
         let end = calendar.date(byAdding: .day, value: 6, to: start) ?? start
 
-        return "\(formatWeekDate(start)) – \(formatWeekDate(end))"
+        return "\(formatWeekDate(start)) – \(formatWeekDate(end))".uppercased()
     }
 
     private func formatWeekDate(_ date: Date) -> String {
         date.formatted(.dateTime.month(.abbreviated).day())
+    }
+}
+
+private struct WorkoutsEmptyRow: View {
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "dumbbell.fill")
+                .font(.system(size: 58, weight: .semibold))
+                .foregroundStyle(Color.primaryLight.opacity(0.55))
+                .shadow(color: Color.primaryLight.opacity(0.24), radius: 18, y: 8)
+                .accessibilityHidden(true)
+
+            VStack(spacing: 7) {
+                Text("No workouts yet — sync from Whoop")
+                    .font(.firaSans(19, weight: .semibold))
+                    .foregroundStyle(Color.text)
+                    .multilineTextAlignment(.center)
+
+                Text("Pull to refresh")
+                    .font(.firaSans(14, weight: .medium))
+                    .foregroundStyle(Color.textMuted)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 42)
+        .padding(.horizontal, 18)
+        .background(cardGradient)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.border.opacity(0.72), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.22), radius: 16, y: 8)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var cardGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.bgCard.opacity(0.98),
+                Color.primaryLight.opacity(0.09),
+                Color.bgSurface.opacity(0.9)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }
 
@@ -206,10 +257,27 @@ private struct WorkoutSkeletonRow: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, minHeight: 60)
-        .background(Color.bgCard.opacity(0.45))
+        .background(cardGradient)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.border.opacity(0.7), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.16), radius: 12, y: 6)
         .redacted(reason: .placeholder)
         .accessibilityHidden(true)
+    }
+
+    private var cardGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.bgCard.opacity(0.98),
+                Color.primaryLight.opacity(0.08),
+                Color.bgSurface.opacity(0.9)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }
 
@@ -246,6 +314,26 @@ private struct WorkoutsStateRow: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 36)
+        .padding(.horizontal, 18)
+        .background(cardGradient)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.border.opacity(0.72), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.22), radius: 16, y: 8)
         .accessibilityElement(children: .contain)
+    }
+
+    private var cardGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.bgCard.opacity(0.98),
+                Color.recoveryRed.opacity(0.08),
+                Color.bgSurface.opacity(0.9)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }

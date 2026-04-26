@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct HeatmapView: View {
     @State private var viewModel = HeatmapViewModel()
@@ -7,11 +8,19 @@ struct HeatmapView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                Text("RECOVERY (90 DAYS)")
-                    .font(.firaSans(12, weight: .semibold))
-                    .foregroundStyle(Color.textDim)
-                    .textCase(.uppercase)
-                    .tracking(0.6)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("HEATMAP")
+                        .font(.firaSans(28, weight: .bold))
+                        .foregroundStyle(Color.text)
+                        .tracking(1.5)
+                        .accessibilityAddTraits(.isHeader)
+
+                    Text("RECOVERY (90 DAYS)")
+                        .font(.firaSans(12, weight: .semibold))
+                        .foregroundStyle(Color.textDim)
+                        .textCase(.uppercase)
+                        .tracking(0.6)
+                }
 
                 content
             }
@@ -21,7 +30,9 @@ struct HeatmapView: View {
         }
         .background(Color.bg.ignoresSafeArea())
         .refreshable {
+            impact()
             await viewModel.load()
+            impact()
         }
         .task {
             await viewModel.load()
@@ -35,11 +46,7 @@ struct HeatmapView: View {
     private var content: some View {
         switch viewModel.state {
         case .empty:
-            HeatmapEmptyState {
-                Task {
-                    await viewModel.load()
-                }
-            }
+            HeatmapEmptyState(retry: reload)
 
         case .loading:
             HeatmapGridSection {
@@ -48,11 +55,7 @@ struct HeatmapView: View {
             HeatmapLegend()
 
         case .error(let error):
-            HeatmapErrorState(error: error) {
-                Task {
-                    await viewModel.load()
-                }
-            }
+            HeatmapErrorState(error: error, retry: reload)
 
         case .success(let data):
             HeatmapGridSection {
@@ -66,6 +69,18 @@ struct HeatmapView: View {
             }
             HeatmapLegend()
         }
+    }
+
+    private func reload() {
+        impact()
+        Task {
+            await viewModel.load()
+            impact()
+        }
+    }
+
+    private func impact() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 }
 
@@ -87,10 +102,30 @@ private struct HeatmapGridSection<Content: View>: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             WeekdayLabelColumn()
-                .padding(.top, 0)
+                .padding(.top, HeatmapGridMetrics.monthLabelHeight + HeatmapGridMetrics.monthLabelSpacing)
 
-            content
+            ScrollView(.horizontal, showsIndicators: false) {
+                content
+            }
+            .scrollClipDisabled()
         }
+        .padding(16)
+        .background(
+            LinearGradient(
+                colors: [
+                    Color.bgCard,
+                    Color.bg
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.border.opacity(0.75), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.4), radius: 12, y: 4)
     }
 }
 
@@ -98,12 +133,12 @@ private struct WeekdayLabelColumn: View {
     private let labels = ["M", "T", "W", "T", "F", "S", "S"]
 
     var body: some View {
-        VStack(spacing: 5) {
+        VStack(spacing: HeatmapGridMetrics.spacing) {
             ForEach(labels.indices, id: \.self) { index in
                 Text(labels[index])
-                    .font(.firaSans(10, weight: .medium))
+                    .font(.firaCode(10, weight: .medium))
                     .foregroundStyle(Color.textDim)
-                    .frame(width: 12, height: 22)
+                    .frame(width: 14, height: HeatmapGridMetrics.tapTargetSide)
             }
         }
         .accessibilityHidden(true)
@@ -113,15 +148,20 @@ private struct WeekdayLabelColumn: View {
 private struct HeatmapLegend: View {
     private let sampleColors: [Color] = [
         Color.bgCard.opacity(0.5),
-        Color.recoveryGreen.opacity(0.25),
-        Color.recoveryGreen.opacity(0.55),
-        Color.recoveryGreen.opacity(0.85)
+        Color.recoveryGreen.opacity(0.22),
+        Color.recoveryGreen.opacity(0.42),
+        Color.recoveryGreen.opacity(0.65),
+        Color.recoveryGreen.opacity(0.9)
     ]
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 7) {
             Text("Less")
-                .font(.firaSans(10, weight: .medium))
+                .font(.firaCode(10, weight: .medium))
+                .foregroundStyle(Color.textDim)
+
+            Text("···")
+                .font(.firaCode(10, weight: .medium))
                 .foregroundStyle(Color.textDim)
 
             HStack(spacing: 4) {
@@ -140,7 +180,7 @@ private struct HeatmapLegend: View {
             .accessibilityHidden(true)
 
             Text("More")
-                .font(.firaSans(10, weight: .medium))
+                .font(.firaCode(10, weight: .medium))
                 .foregroundStyle(Color.textDim)
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
@@ -175,11 +215,22 @@ private struct HeatmapEmptyState: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
-        .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(
+            LinearGradient(
+                colors: [
+                    Color.bgCard,
+                    Color.bg
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
         .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.border, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.border.opacity(0.75), lineWidth: 1)
         }
+        .shadow(color: .black.opacity(0.4), radius: 12, y: 4)
     }
 }
 
@@ -211,11 +262,22 @@ private struct HeatmapErrorState: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
-        .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(
+            LinearGradient(
+                colors: [
+                    Color.bgCard,
+                    Color.bg
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
         .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.border, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.border.opacity(0.75), lineWidth: 1)
         }
+        .shadow(color: .black.opacity(0.4), radius: 12, y: 4)
     }
 
     private var message: String {

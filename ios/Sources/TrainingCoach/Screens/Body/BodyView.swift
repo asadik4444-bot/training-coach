@@ -1,5 +1,6 @@
 import HealthKit
 import SwiftUI
+import UIKit
 
 struct BodyView: View {
     @State private var viewModel = BodyViewModel()
@@ -86,20 +87,37 @@ private struct BodyMetricsScrollView: View {
                     HealthKitCTAView(grantAccess: grantAccess)
                 }
 
-                WeightCard(metric: data.weight, healthKitAvailable: healthKitAvailable)
+                LazyVGrid(columns: metricColumns, spacing: 14) {
+                    WeightCard(metric: data.weight, healthKitAvailable: healthKitAvailable)
 
-                BodyFatCard(value: data.bodyFatPct, healthKitAvailable: healthKitAvailable)
+                    BodyFatCard(value: data.bodyFatPct, healthKitAvailable: healthKitAvailable)
 
-                RHRCard(metric: viewModel.rhrMetric(from: data.rhrTrend))
+                    RHRCard(metric: viewModel.rhrMetric(from: data.rhrTrend))
 
-                SleepEfficiencyCard(metric: viewModel.sleepMetric(from: data.sleepTrend))
+                    SleepEfficiencyCard(metric: viewModel.sleepMetric(from: data.sleepTrend))
+                }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 24)
         }
         .refreshable {
-            await viewModel.load()
+            await refresh()
         }
+    }
+
+    private var metricColumns: [GridItem] {
+        [
+            GridItem(.flexible(), spacing: 14),
+            GridItem(.flexible(), spacing: 14)
+        ]
+    }
+
+    private func refresh() async {
+        await MainActor.run {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+
+        await viewModel.load()
     }
 }
 
@@ -126,7 +144,7 @@ private struct BodyStateScrollView<Content: View>: View {
 private struct BodyHeaderView: View {
     var body: some View {
         Text("BODY")
-            .font(.firaSans(32, weight: .bold))
+            .font(.firaSans(28, weight: .bold))
             .foregroundStyle(Color.text)
             .tracking(1.5)
             .accessibilityAddTraits(.isHeader)
@@ -162,15 +180,28 @@ private struct HealthKitCTAView: View {
                     .accessibilityHidden(true)
             }
             .padding(16)
-            .background(Color.bgCard.opacity(0.82))
+            .background(cardGradient)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(Color.border, lineWidth: 1)
             }
+            .shadow(color: Color.black.opacity(0.22), radius: 16, y: 8)
         }
         .buttonStyle(.plain)
         .accessibilityHint("Opens the HealthKit permission sheet.")
+    }
+
+    private var cardGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.bgCard.opacity(0.98),
+                Color.recoveryGreen.opacity(0.08),
+                Color.bgSurface.opacity(0.9)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }
 
@@ -213,12 +244,13 @@ private struct BodyFatCard: View {
             trendPreference: .lowerIsBetter,
             placeholder: placeholder,
             valueFormat: .number.precision(.fractionLength(1)),
-            accessibilityLabelText: "Body fat percentage"
+            accessibilityLabelText: "Body fat percentage",
+            placeholderStyle: .dash
         )
     }
 
     private var placeholder: String {
-        healthKitAvailable ? "No HealthKit body fat sample yet" : "HealthKit unavailable on this device"
+        healthKitAvailable ? "—" : "—"
     }
 }
 
@@ -261,31 +293,78 @@ private struct SleepEfficiencyCard: View {
 }
 
 private struct BodyLoadingView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isPulsing = false
+
     var body: some View {
-        VStack(spacing: 14) {
+        LazyVGrid(columns: metricColumns, spacing: 14) {
             ForEach(0..<4, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.bgCard.opacity(0.86))
-                    .frame(height: 154)
-                    .overlay(alignment: .leading) {
-                        VStack(alignment: .leading, spacing: 14) {
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color.textDim.opacity(0.25))
-                                .frame(width: 96, height: 12)
-
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(Color.textDim.opacity(0.18))
-                                .frame(width: 160, height: 38)
-
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(Color.textDim.opacity(0.12))
-                                .frame(height: 54)
-                        }
-                        .padding(18)
-                    }
+                BodyMetricSkeletonCard()
+                    .opacity(reduceMotion ? 1 : (isPulsing ? 0.54 : 1))
                     .accessibilityLabel("Loading body metric")
             }
         }
+        .onAppear {
+            guard reduceMotion == false else {
+                return
+            }
+
+            withAnimation(.easeInOut(duration: 1.15).repeatForever(autoreverses: true)) {
+                isPulsing = true
+            }
+        }
+    }
+
+    private var metricColumns: [GridItem] {
+        [
+            GridItem(.flexible(), spacing: 14),
+            GridItem(.flexible(), spacing: 14)
+        ]
+    }
+}
+
+private struct BodyMetricSkeletonCard: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(cardGradient)
+            .frame(minHeight: 178)
+            .overlay(alignment: .leading) {
+                VStack(alignment: .leading, spacing: 16) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.textDim.opacity(0.28))
+                        .frame(width: 76, height: 11)
+
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.textDim.opacity(0.2))
+                        .frame(width: 118, height: 38)
+
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.textDim.opacity(0.12))
+                        .frame(height: 58)
+
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.textDim.opacity(0.16))
+                        .frame(width: 92, height: 12)
+                }
+                .padding(18)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.border.opacity(0.72), lineWidth: 1)
+            }
+            .shadow(color: Color.black.opacity(0.22), radius: 16, y: 8)
+    }
+
+    private var cardGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.bgCard.opacity(0.98),
+                Color.primaryLight.opacity(0.1),
+                Color.bgSurface.opacity(0.9)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }
 
@@ -311,8 +390,25 @@ private struct EmptyBodyStateView: View {
                 .clipShape(Capsule())
         }
         .padding(20)
-        .background(Color.bgCard)
+        .background(cardGradient)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.border.opacity(0.72), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.22), radius: 16, y: 8)
+    }
+
+    private var cardGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.bgCard.opacity(0.98),
+                Color.primaryLight.opacity(0.08),
+                Color.bgSurface.opacity(0.9)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }
 
@@ -340,8 +436,25 @@ private struct BodyErrorView: View {
                 .clipShape(Capsule())
         }
         .padding(20)
-        .background(Color.bgCard)
+        .background(cardGradient)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.border.opacity(0.72), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.22), radius: 16, y: 8)
+    }
+
+    private var cardGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.bgCard.opacity(0.98),
+                Color.recoveryRed.opacity(0.08),
+                Color.bgSurface.opacity(0.9)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }
 

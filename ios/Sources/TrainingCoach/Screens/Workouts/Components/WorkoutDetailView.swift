@@ -8,11 +8,14 @@ struct WorkoutDetailView: View {
             VStack(alignment: .leading, spacing: 20) {
                 heroHeader
 
+                totalMinutesCard
+
                 VStack(alignment: .leading, spacing: 14) {
                     HStack(alignment: .firstTextBaseline) {
-                        Text("Zone breakdown")
-                            .font(.firaSans(18, weight: .semibold))
-                            .foregroundStyle(Color.text)
+                        Text("ZONE BREAKDOWN")
+                            .font(.firaSans(11, weight: .semibold))
+                            .foregroundStyle(Color.textMuted)
+                            .kerning(1.5)
 
                         Spacer()
 
@@ -24,12 +27,13 @@ struct WorkoutDetailView: View {
                     ZoneBars(zoneMinutes: item.workout.zoneMinutes)
                 }
                 .padding(16)
-                .background(Color.bgCard.opacity(0.74))
+                .background(cardGradient(accent: strainColor))
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .stroke(Color.border.opacity(0.72), lineWidth: 1)
                 }
+                .shadow(color: Color.black.opacity(0.22), radius: 16, y: 8)
 
                 heartRateCard
 
@@ -47,9 +51,9 @@ struct WorkoutDetailView: View {
     }
 
     private var heroHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
             Text(sportLabel.uppercased())
-                .font(.firaSans(24, weight: .bold))
+                .font(.firaSans(28, weight: .bold))
                 .foregroundStyle(Color.text)
                 .tracking(1.2)
                 .lineLimit(1)
@@ -57,9 +61,9 @@ struct WorkoutDetailView: View {
 
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(strainText)
-                    .font(.firaCode(40, weight: .medium).monospacedDigit())
+                    .font(.firaCode(58, weight: .medium).monospacedDigit())
                     .foregroundStyle(strainColor)
-                    .shadow(color: strainColor.opacity(0.7), radius: 18)
+                    .shadow(color: strainColor.opacity(0.72), radius: 24, y: 8)
 
                 Text("strain")
                     .font(.firaSans(16, weight: .medium))
@@ -70,7 +74,59 @@ struct WorkoutDetailView: View {
                 .font(.firaSans(14))
                 .foregroundStyle(Color.textDim)
         }
+        .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardGradient(accent: strainColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.border.opacity(0.72), lineWidth: 1)
+        }
+        .shadow(color: strainColor.opacity(0.18), radius: 18, y: 8)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var totalMinutesCard: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "clock.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Color.primaryLight)
+                .frame(width: 36, height: 36)
+                .background(Color.primaryLight.opacity(0.15))
+                .clipShape(Circle())
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("TOTAL MINUTES")
+                    .font(.firaSans(11, weight: .semibold))
+                    .foregroundStyle(Color.textMuted)
+                    .kerning(1.5)
+
+                Text("Time across all heart-rate zones")
+                    .font(.firaSans(13))
+                    .foregroundStyle(Color.textDim)
+            }
+
+            Spacer(minLength: 12)
+
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                Text("\(totalZoneMinutes)")
+                    .font(.firaCode(28, weight: .medium).monospacedDigit())
+                    .foregroundStyle(Color.text)
+
+                Text("min")
+                    .font(.firaSans(13, weight: .medium))
+                    .foregroundStyle(Color.textMuted)
+            }
+        }
+        .padding(16)
+        .background(cardGradient(accent: Color.primaryLight))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.border.opacity(0.72), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.22), radius: 16, y: 8)
         .accessibilityElement(children: .combine)
     }
 
@@ -86,12 +142,13 @@ struct WorkoutDetailView: View {
             heartRateStat(title: "Max HR", value: item.workout.maxHr)
         }
         .padding(.vertical, 16)
-        .background(Color.bgCard.opacity(0.74))
+        .background(cardGradient(accent: Color.primaryLight))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.border.opacity(0.72), lineWidth: 1)
         }
+        .shadow(color: Color.black.opacity(0.22), radius: 16, y: 8)
         .accessibilityElement(children: .combine)
     }
 
@@ -122,15 +179,20 @@ struct WorkoutDetailView: View {
                 .shadow(color: band.color.opacity(0.5), radius: 8)
                 .accessibilityHidden(true)
 
-            Text("Recovery was \(score)% — \(band.label) band")
+            Text("Recovery was \(score)% — \(recoveryMessage(for: score))")
                 .font(.firaSans(14, weight: .medium))
                 .foregroundStyle(Color.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.bgSurface.opacity(0.9))
+        .background(cardGradient(accent: band.color))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.border.opacity(0.72), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.22), radius: 16, y: 8)
         .accessibilityElement(children: .combine)
     }
 
@@ -179,23 +241,35 @@ struct WorkoutDetailView: View {
     }
 
     private var totalZoneMinutes: Int {
-        item.workout.zoneMinutes.z1
+        item.workout.zoneMinutes.z0
+            + item.workout.zoneMinutes.z1
             + item.workout.zoneMinutes.z2
             + item.workout.zoneMinutes.z3
             + item.workout.zoneMinutes.z4
             + item.workout.zoneMinutes.z5
     }
-}
 
-private extension RecoveryBand {
-    var label: String {
-        switch self {
-        case .green:
-            return "green"
-        case .yellow:
-            return "yellow"
-        case .red:
-            return "red"
+    private func recoveryMessage(for score: Int) -> String {
+        if score >= 67 {
+            return "you had room to push"
         }
+
+        if score >= 34 {
+            return "hard day for you"
+        }
+
+        return "very hard day for you"
+    }
+
+    private func cardGradient(accent: Color) -> LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.bgCard.opacity(0.98),
+                accent.opacity(0.09),
+                Color.bgSurface.opacity(0.9)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }

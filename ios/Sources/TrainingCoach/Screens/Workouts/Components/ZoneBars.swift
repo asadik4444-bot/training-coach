@@ -5,6 +5,7 @@ struct ZoneBars: View {
 
     private var zones: [ZoneBar] {
         [
+            ZoneBar(label: "Z0", minutes: zoneMinutes.z0, color: Color.textDim),
             ZoneBar(label: "Z1", minutes: zoneMinutes.z1, color: Color(hex: 0x60A5FA)),
             ZoneBar(label: "Z2", minutes: zoneMinutes.z2, color: Color(hex: 0x22D3EE)),
             ZoneBar(label: "Z3", minutes: zoneMinutes.z3, color: Color(hex: 0x22C55E)),
@@ -13,14 +14,14 @@ struct ZoneBars: View {
         ]
     }
 
-    private var maxMinutes: Int {
-        max(zones.map(\.minutes).max() ?? 0, 1)
+    private var totalMinutes: Int {
+        max(zones.map(\.minutes).reduce(0, +), 1)
     }
 
     var body: some View {
         VStack(spacing: 10) {
             ForEach(zones) { zone in
-                ZoneBarRow(zone: zone, maxMinutes: maxMinutes)
+                ZoneBarRow(zone: zone, totalMinutes: totalMinutes)
             }
         }
         .accessibilityElement(children: .contain)
@@ -39,7 +40,7 @@ private struct ZoneBar: Identifiable {
 
 private struct ZoneBarRow: View {
     let zone: ZoneBar
-    let maxMinutes: Int
+    let totalMinutes: Int
 
     @ScaledMetric(relativeTo: .caption) private var barHeight: CGFloat = 12
 
@@ -78,10 +79,10 @@ private struct ZoneBarRow: View {
     }
 
     private func barWidth(in availableWidth: CGFloat) -> CGFloat {
-        guard zone.minutes > 0, maxMinutes > 0 else {
+        guard zone.minutes > 0, totalMinutes > 0 else {
             return 0
         }
 
-        return max(6, availableWidth * CGFloat(zone.minutes) / CGFloat(maxMinutes))
+        return max(6, availableWidth * CGFloat(zone.minutes) / CGFloat(totalMinutes))
     }
 }

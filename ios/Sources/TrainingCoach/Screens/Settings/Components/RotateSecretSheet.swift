@@ -10,7 +10,6 @@ struct RotateSecretSheet: View {
     @State private var state = ValidationState.idle
     @State private var shakeOffset: CGFloat = 0
 
-    @ScaledMetric(relativeTo: .largeTitle) private var titleSize: CGFloat = 26
     @ScaledMetric(relativeTo: .body) private var fieldSize: CGFloat = 16
     @ScaledMetric(relativeTo: .body) private var buttonSize: CGFloat = 17
 
@@ -22,7 +21,7 @@ struct RotateSecretSheet: View {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("ROTATE SECRET")
-                        .font(.firaSans(titleSize, weight: .bold))
+                        .font(.firaSans(28, weight: .bold))
                         .foregroundStyle(Color.text)
                         .tracking(1.1)
 

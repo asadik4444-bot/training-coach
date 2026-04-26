@@ -258,11 +258,12 @@ private struct RecoveryScoreText: View, Animatable {
 
     var body: some View {
         Text(scoreText)
-            .font(.custom("FiraCode-Medium", size: 64, relativeTo: .largeTitle).weight(.semibold).monospacedDigit())
+            .font(.firaCode(64, weight: .semibold).monospacedDigit())
             .foregroundStyle(color)
             .lineLimit(1)
             .minimumScaleFactor(0.58)
             .scaleEffect(isExpanded ? 1.08 : 1)
+            .shadow(color: isLoading ? .clear : color.opacity(0.62), radius: isExpanded ? 14 : 10)
     }
 
     private var scoreText: String {

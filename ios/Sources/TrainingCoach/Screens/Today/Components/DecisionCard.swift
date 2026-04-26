@@ -2,6 +2,10 @@ import Foundation
 import SwiftUI
 
 struct DecisionCard: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    @State private var accentPulse = false
+
     let decision: Decision?
 
     private var borderColor: Color {
@@ -13,17 +17,75 @@ struct DecisionCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("TODAY'S DECISION")
-                    .font(.firaSans(11, weight: .medium))
+        ZStack(alignment: .leading) {
+            if showsHardStopAccent {
+                Rectangle()
+                    .fill(Color.recoveryRed)
+                    .frame(width: 4)
+                    .frame(maxHeight: .infinity)
+                    .brightness(reduceMotion ? 0 : (accentPulse ? 0.04 : 0))
+                    .accessibilityHidden(true)
+            }
+
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("TODAY'S DECISION")
+                        .font(.firaSans(11, weight: .medium))
+                        .foregroundStyle(Color.textMuted)
+
+                    Spacer()
+
+                    Text(multiplierText)
+                        .font(.firaCode(14, weight: .medium).monospacedDigit())
+                        .foregroundStyle(Color.textDim)
+                }
+
+                decisionHero
+
+                Text(reasonText)
+                    .font(.firaSans(14))
+                    .italic()
                     .foregroundStyle(Color.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.leading, showsHardStopAccent ? 10 : 0)
+            .padding(18)
+        }
+        .frame(maxWidth: .infinity, minHeight: 168, alignment: .leading)
+        .todayCardStyle()
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(borderColor, lineWidth: decision?.isRed == true || decision?.hardStop == true ? 1 : 0)
+        }
+        .task(id: showsHardStopAccent) {
+            guard showsHardStopAccent, !reduceMotion else {
+                accentPulse = false
+                return
+            }
 
-                Spacer()
+            withAnimation(.easeInOut(duration: 1.15).repeatForever(autoreverses: true)) {
+                accentPulse = true
+            }
+        }
+        .onChange(of: reduceMotion) { _, isReduced in
+            guard isReduced else {
+                return
+            }
 
-                Text(multiplierText)
-                    .font(.firaCode(14, weight: .medium).monospacedDigit())
-                    .foregroundStyle(Color.textDim)
+            accentPulse = false
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Today's decision")
+        .accessibilityValue(accessibilityValue)
+    }
+
+    private var decisionHero: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            if decision?.hardStop == true {
+                Image(systemName: "hand.raised.fill")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Color.recoveryRed)
+                    .accessibilityHidden(true)
             }
 
             Text(heroText)
@@ -31,23 +93,7 @@ struct DecisionCard: View {
                 .foregroundStyle(decisionColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.62)
-
-            Text(reasonText)
-                .font(.firaSans(14))
-                .italic()
-                .foregroundStyle(Color.textMuted)
-                .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(18)
-        .todayCardStyle()
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(borderColor, lineWidth: decision?.isRed == true || decision?.hardStop == true ? 1 : 0)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Today's decision")
-        .accessibilityValue(accessibilityValue)
     }
 
     private var heroText: String {
@@ -55,8 +101,7 @@ struct DecisionCard: View {
             return "NO DECISION"
         }
 
-        let stopPrefix = decision.hardStop ? "🛑 " : ""
-        return "\(stopPrefix)\(decision.title)"
+        return decision.title
     }
 
     private var reasonText: String {
@@ -73,6 +118,10 @@ struct DecisionCard: View {
         }
 
         return String(format: "%.0f%%", decision.intensityMultiplier * 100)
+    }
+
+    private var showsHardStopAccent: Bool {
+        decision?.isRed == true && decision?.hardStop == true
     }
 
     private var accessibilityValue: String {

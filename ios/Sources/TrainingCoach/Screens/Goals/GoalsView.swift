@@ -5,7 +5,6 @@ struct GoalsView: View {
     private let telegramURL = URL(string: "https://t.me/whoop_trainer_bot")!
 
     @ScaledMetric(relativeTo: .largeTitle) private var iconSize: CGFloat = 64
-    @ScaledMetric(relativeTo: .largeTitle) private var titleSize: CGFloat = 28
     @ScaledMetric(relativeTo: .body) private var bodySize: CGFloat = 16
     @ScaledMetric(relativeTo: .body) private var buttonSize: CGFloat = 16
 
@@ -24,12 +23,12 @@ struct GoalsView: View {
                         .accessibilityHidden(true)
 
                     Text("GOALS")
-                        .font(.firaSans(titleSize, weight: .bold))
+                        .font(.firaSans(28, weight: .bold))
                         .foregroundStyle(Color.text)
-                        .tracking(1.2)
+                        .tracking(1.5)
 
                     VStack(alignment: .leading, spacing: 18) {
-                        Text("Goals are managed via Telegram for v9.0.")
+                        Text("Goals are managed in Telegram.")
                             .font(.firaSans(20, weight: .semibold))
                             .foregroundStyle(Color.text)
                             .fixedSize(horizontal: false, vertical: true)
@@ -39,21 +38,22 @@ struct GoalsView: View {
                             .foregroundStyle(Color.textMuted)
                             .fixedSize(horizontal: false, vertical: true)
 
-                        Button("Open Telegram bot", systemImage: "paperplane.fill", action: openTelegram)
+                        Button("Open @whoop_trainer_bot", systemImage: "paperplane.fill", action: openTelegram)
                             .font(.firaSans(buttonSize, weight: .semibold))
                             .foregroundStyle(Color.text)
                             .frame(maxWidth: .infinity, minHeight: 52)
                             .background(Color.primary)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .clipShape(Capsule())
                             .shadow(color: Color.primary.opacity(0.28), radius: 12, y: 4)
                     }
                     .padding(22)
-                    .background(Color.bgCard)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .background(cardGradient)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(Color.border, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color.border.opacity(0.72), lineWidth: 1)
                     }
+                    .shadow(color: Color.black.opacity(0.22), radius: 16, y: 8)
 
                     Text("Coming in v9.1: native goals editing")
                         .font(.firaSans(14, weight: .medium))
@@ -71,6 +71,18 @@ struct GoalsView: View {
     private func openTelegram() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         UIApplication.shared.open(telegramURL)
+    }
+
+    private var cardGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.bgCard.opacity(0.98),
+                Color.primaryLight.opacity(0.1),
+                Color.bgSurface.opacity(0.9)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }
 

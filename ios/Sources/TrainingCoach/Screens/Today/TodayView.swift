@@ -2,6 +2,8 @@ import SwiftUI
 import UIKit
 
 struct TodayView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @State private var vm = TodayViewModel()
     @State private var didAppear = false
 
@@ -15,6 +17,7 @@ struct TodayView: View {
             .refreshable {
                 impact()
                 await vm.load()
+                successFeedback()
             }
             .background(Color.bg.ignoresSafeArea())
             .navigationTitle("Today")
@@ -29,7 +32,7 @@ struct TodayView: View {
             impact()
             await vm.load()
         }
-        .animation(.spring(response: 0.45, dampingFraction: 0.78), value: vm.state)
+        .animation(reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.78), value: vm.state)
     }
 
     @ViewBuilder
@@ -37,8 +40,9 @@ struct TodayView: View {
         switch vm.state {
         case .empty:
             TodayPlaceholderView(
-                title: "No data yet",
-                message: "Refresh when you are ready.",
+                title: "No recovery data yet — sync your Whoop",
+                message: "Refresh after your latest recovery sync finishes.",
+                systemImage: "waveform.path.ecg",
                 retry: reload
             )
 
@@ -53,7 +57,16 @@ struct TodayView: View {
             )
 
         case .success(let data):
-            TodaySuccessView(data: data)
+            if data.hasWhoopData {
+                TodaySuccessView(data: data)
+            } else {
+                TodayPlaceholderView(
+                    title: "No recovery data yet — sync your Whoop",
+                    message: "Refresh after your latest recovery sync finishes.",
+                    systemImage: "waveform.path.ecg",
+                    retry: reload
+                )
+            }
         }
     }
 
@@ -66,6 +79,10 @@ struct TodayView: View {
 
     private func impact() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    private func successFeedback() {
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 }
 
@@ -82,6 +99,7 @@ private struct TodaySuccessView: View {
             DecisionCard(decision: data.decision)
             PainProteinBedtimeRow(day: data.day)
             shareRecapButton
+                .padding(.top, 4)
         }
         .sheet(isPresented: $isRecapPresented) {
             RecapView()
@@ -89,57 +107,78 @@ private struct TodaySuccessView: View {
     }
 
     private var shareRecapButton: some View {
-        Button {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            isRecapPresented = true
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(Color.primaryLight)
-                    .frame(width: 34, height: 34)
-                    .background(Color.primaryLight.opacity(0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .accessibilityHidden(true)
+        VStack(spacing: 7) {
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                isRecapPresented = true
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Color.primaryLight)
+                        .frame(width: 34, height: 34)
+                        .background(Color.primaryLight.opacity(0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .accessibilityHidden(true)
 
-                Text("Share Recap")
-                    .font(.firaSans(15, weight: .medium))
-                    .foregroundStyle(Color.text)
+                    Text("Share Recap")
+                        .font(.firaSans(15, weight: .medium))
+                        .foregroundStyle(Color.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
 
-                Spacer(minLength: 8)
+                    Spacer(minLength: 8)
 
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.textDim)
-                    .accessibilityHidden(true)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.textDim)
+                        .accessibilityHidden(true)
+                }
+                .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+                .padding(14)
+                .todayCardStyle()
             }
-            .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
-            .padding(14)
-            .todayCardStyle()
+            .buttonStyle(.plain)
+            .accessibilityLabel("Share recap")
+            .accessibilityHint("Opens the shareable recap card generator.")
+
+            Text("WEEKLY RITUAL")
+                .font(.firaSans(10, weight: .medium))
+                .foregroundStyle(Color.textDim)
+                .lineLimit(1)
+                .accessibilityHidden(true)
         }
-        .buttonStyle(.plain)
-        .accessibilityHint("Opens the shareable recap card generator.")
     }
 }
 
 private struct TodayPlaceholderView: View {
     let title: String
     let message: String
+    var systemImage: String? = nil
     let retry: () -> Void
 
     var body: some View {
         VStack(spacing: 16) {
             Spacer(minLength: 90)
 
-            VStack(spacing: 8) {
+            VStack(spacing: 12) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 44, weight: .medium))
+                        .foregroundStyle(Color.primaryLight.opacity(0.28))
+                        .accessibilityHidden(true)
+                }
+
                 Text(title)
                     .font(.firaSans(22, weight: .semibold))
                     .foregroundStyle(Color.text)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Text(message)
                     .font(.firaSans(14))
                     .foregroundStyle(Color.textMuted)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Button(action: retry) {
@@ -155,6 +194,7 @@ private struct TodayPlaceholderView: View {
             Spacer(minLength: 90)
         }
         .frame(maxWidth: .infinity)
+        .padding(24)
         .todayCardStyle()
     }
 }
@@ -165,21 +205,23 @@ private struct TodaySkeletonView: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            SkeletonCard(height: 190)
+            SkeletonCard(height: 316)
             HStack(spacing: 10) {
-                SkeletonCard(height: 104)
-                SkeletonCard(height: 104)
-                SkeletonCard(height: 104)
+                SkeletonCard(height: 132)
+                SkeletonCard(height: 132)
+                SkeletonCard(height: 132)
             }
-            SkeletonCard(height: 142)
-            SkeletonCard(height: 160)
+            SkeletonCard(height: 214)
+            SkeletonCard(height: 168)
             HStack(spacing: 10) {
-                SkeletonCard(height: 86)
-                SkeletonCard(height: 86)
-                SkeletonCard(height: 86)
+                SkeletonCard(height: 132)
+                SkeletonCard(height: 132)
+                SkeletonCard(height: 132)
             }
+            SkeletonCard(height: 105)
+                .padding(.top, 4)
         }
-        .opacity(reduceMotion ? 0.62 : (pulse ? 0.38 : 0.82))
+        .opacity(reduceMotion ? 0.8 : (pulse ? 0.4 : 0.8))
         .task {
             guard !reduceMotion else {
                 return
@@ -231,6 +273,7 @@ private struct PainProteinBedtimeRow: View {
                 label: "Pain",
                 value: painValue,
                 detail: painDetail,
+                systemImage: "heart.text.square",
                 color: painColor,
                 accessibilityValue: painAccessibilityValue
             )
@@ -239,6 +282,7 @@ private struct PainProteinBedtimeRow: View {
                 label: "Protein",
                 value: proteinValue,
                 detail: proteinDetail,
+                systemImage: "fork.knife",
                 color: proteinColor,
                 accessibilityValue: proteinAccessibilityValue
             )
@@ -247,6 +291,7 @@ private struct PainProteinBedtimeRow: View {
                 label: "Bedtime",
                 value: day.bedtime ?? "--:--",
                 detail: day.bedtime == nil ? "not set" : "target",
+                systemImage: "moon.zzz.fill",
                 color: Color.primaryLight,
                 accessibilityValue: day.bedtime ?? "Not set"
             )
@@ -337,16 +382,18 @@ private struct SummaryTile: View {
     let label: String
     let value: String
     let detail: String
+    let systemImage: String
     let color: Color
     let accessibilityValue: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(label.uppercased())
-                .font(.firaSans(11, weight: .medium))
-                .foregroundStyle(Color.textMuted)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+        VStack(alignment: .center, spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(color)
+                .frame(width: 30, height: 30)
+                .background(color.opacity(0.13), in: Circle())
+                .accessibilityHidden(true)
 
             Text(value)
                 .font(.firaCode(16, weight: .medium).monospacedDigit())
@@ -354,18 +401,31 @@ private struct SummaryTile: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
 
+            Text(label.uppercased())
+                .font(.firaSans(10, weight: .medium))
+                .foregroundStyle(Color.textMuted)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+
             Text(detail)
                 .font(.firaSans(12, weight: .medium))
                 .foregroundStyle(Color.textDim)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
-        .frame(maxWidth: .infinity, minHeight: 86, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 104, alignment: .center)
         .padding(14)
         .todayCardStyle()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)
         .accessibilityValue(accessibilityValue)
+    }
+}
+
+private extension TodayData {
+    var hasWhoopData: Bool {
+        let biometrics = day.biometrics
+        return biometrics?.recovery != nil || biometrics?.sleep != nil || biometrics?.lastWorkout != nil
     }
 }
 

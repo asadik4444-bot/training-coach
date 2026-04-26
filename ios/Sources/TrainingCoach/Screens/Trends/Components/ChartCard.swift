@@ -13,6 +13,7 @@ struct ChartCard: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedPoint: ChartPoint?
     @State private var skeletonPulse = false
+    @State private var skeletonPhase: CGFloat = 0
 
     init(
         metricLabel: String,
@@ -38,8 +39,8 @@ struct ChartCard: View {
                 let points = chartPoints
                 header(points: points)
 
-                if points.isEmpty {
-                    emptyContent
+                if points.count < 2 {
+                    sparseContent(points: points)
                 } else {
                     chart(points: points)
                 }
@@ -53,7 +54,7 @@ struct ChartCard: View {
                 .stroke(Color.border.opacity(0.75), lineWidth: 1)
         }
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(color: color.opacity(0.16), radius: 22, y: 12)
+        .shadow(color: .black.opacity(0.4), radius: 12, y: 4)
         .onAppear(perform: startSkeletonAnimation)
         .onChange(of: data) {
             selectedPoint = nil
@@ -82,8 +83,7 @@ struct ChartCard: View {
                 LinearGradient(
                     colors: [
                         Color.bgCard,
-                        color.opacity(0.13),
-                        Color.bgSurface
+                        Color.bg
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -103,8 +103,37 @@ struct ChartCard: View {
                 skeletonBar(width: 42, height: 24)
             }
 
-            VStack(alignment: .leading, spacing: 12) {
-                skeletonBar(width: .infinity, height: 138)
+            VStack(alignment: .leading, spacing: 14) {
+                ZStack {
+                    VStack(spacing: 0) {
+                        ForEach(0..<4, id: \.self) { index in
+                            Rectangle()
+                                .fill(Color.border.opacity(0.22))
+                                .frame(height: 1)
+
+                            if index < 3 {
+                                Spacer()
+                            }
+                        }
+                    }
+
+                    SkeletonSineWave(phase: skeletonPhase)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    color.opacity(skeletonPulse ? 0.72 : 0.38),
+                                    Color.text.opacity(skeletonPulse ? 0.18 : 0.1),
+                                    color.opacity(skeletonPulse ? 0.52 : 0.28)
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ),
+                            style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+                        )
+                        .shadow(color: color.opacity(0.24), radius: 10)
+                }
+                .frame(height: 138)
+
                 HStack {
                     skeletonBar(width: 44, height: 10)
                     Spacer()
@@ -119,33 +148,44 @@ struct ChartCard: View {
         .accessibilityLabel("\(metricLabel) \(windowLabel) chart loading")
     }
 
-    private var emptyContent: some View {
+    private func sparseContent(points: [ChartPoint]) -> some View {
         VStack(spacing: 10) {
             Image(systemName: "chart.line.uptrend.xyaxis")
                 .font(.system(size: 24, weight: .medium))
                 .foregroundStyle(color.opacity(0.75))
                 .accessibilityHidden(true)
 
-            Text("No data yet")
+            Text("Sparse data — sync more workouts")
                 .font(.firaSans(15, weight: .medium))
                 .foregroundStyle(Color.textMuted)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
         .frame(height: 190)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(metricLabel) \(windowLabel) chart, latest no data")
+        .accessibilityLabel("\(metricLabel) \(windowLabel) chart, \(points.count) data points")
     }
 
     private func header(points: [ChartPoint]) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(metricLabel)
-                    .font(.firaSans(13, weight: .semibold))
-                    .foregroundStyle(Color.textMuted)
+                HStack(spacing: 8) {
+                    Text(metricLabel.uppercased())
+                        .font(.firaSans(11, weight: .semibold))
+                        .foregroundStyle(Color.textDim)
+                        .tracking(1.2)
+
+                    Text(windowLabel.uppercased())
+                        .font(.firaCode(10, weight: .medium).monospacedDigit())
+                        .foregroundStyle(Color.textDim)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(Color.bgSurface, in: Capsule(style: .continuous))
+                }
 
                 Text(latestValueText(points: points))
-                    .font(.firaCode(28, weight: .medium).monospacedDigit())
-                    .foregroundStyle(Color.text)
+                    .font(.firaCode(30, weight: .medium).monospacedDigit())
+                    .foregroundStyle(points.isEmpty ? Color.textDim : color)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                     .shadow(color: color.opacity(0.55), radius: 14)
@@ -153,12 +193,7 @@ struct ChartCard: View {
 
             Spacer(minLength: 12)
 
-            Text(windowLabel)
-                .font(.firaCode(12, weight: .medium).monospacedDigit())
-                .foregroundStyle(color)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(color.opacity(0.14), in: Capsule(style: .continuous))
+            trendBadge(points: points)
         }
         .accessibilityElement(children: .combine)
     }
@@ -206,7 +241,13 @@ struct ChartCard: View {
                 .foregroundStyle(color)
                 .symbolSize(78)
                 .annotation(position: .top, alignment: .center) {
-                    callout(point: selectedPoint)
+                    callout(point: selectedPoint, in: points)
+                        .id(selectedPoint.id)
+                        .transition(reduceMotion ? .opacity : .scale(scale: 0.88).combined(with: .opacity))
+                        .animation(
+                            reduceMotion ? .easeInOut(duration: 0.12) : .spring(response: 0.28, dampingFraction: 0.78),
+                            value: selectedPoint.id
+                        )
                 }
             }
         }
@@ -224,14 +265,17 @@ struct ChartCard: View {
             }
         }
         .chartYAxis {
-            AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) {
+            AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { axisValue in
                 AxisGridLine()
-                    .foregroundStyle(Color.border.opacity(0.35))
-                AxisTick()
-                    .foregroundStyle(Color.border.opacity(0.55))
-                AxisValueLabel()
-                    .font(.caption2)
-                    .foregroundStyle(Color.textMuted)
+                    .foregroundStyle(Color.border.opacity(0.3))
+                AxisValueLabel {
+                    if let value = axisValue.as(Double.self) {
+                        Text(axisLabel(value))
+                            .font(.firaCode(10, weight: .medium).monospacedDigit())
+                            .foregroundStyle(Color.textDim)
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                }
             }
         }
         .chartOverlay { proxy in
@@ -262,8 +306,30 @@ struct ChartCard: View {
         }
     }
 
-    private func callout(point: ChartPoint) -> some View {
-        VStack(spacing: 3) {
+    private func trendBadge(points: [ChartPoint]) -> some View {
+        let summary = trendSummary(points: points)
+
+        return HStack(spacing: 6) {
+            Image(systemName: summary?.symbolName ?? "minus")
+                .font(.system(size: 11, weight: .semibold))
+                .accessibilityHidden(true)
+
+            Text(summary?.text ?? "No prior")
+                .font(.firaCode(11, weight: .medium).monospacedDigit())
+        }
+        .foregroundStyle(summary?.color ?? Color.textDim)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background((summary?.color ?? Color.textDim).opacity(0.14), in: Capsule(style: .continuous))
+        .overlay {
+            Capsule(style: .continuous)
+                .stroke((summary?.color ?? Color.border).opacity(0.42), lineWidth: 1)
+        }
+        .accessibilityLabel(summary?.accessibilityLabel ?? "No previous period")
+    }
+
+    private func callout(point: ChartPoint, in points: [ChartPoint]) -> some View {
+        VStack(spacing: 5) {
             Text(point.date.formatted(.dateTime.month(.abbreviated).day()))
                 .font(.firaSans(11, weight: .medium))
                 .foregroundStyle(Color.textMuted)
@@ -271,6 +337,18 @@ struct ChartCard: View {
             Text(formattedValue(point.value))
                 .font(.firaCode(13, weight: .medium).monospacedDigit())
                 .foregroundStyle(Color.text)
+
+            if let summary = trendSummary(for: point, in: points) {
+                HStack(spacing: 4) {
+                    Image(systemName: summary.symbolName)
+                        .font(.system(size: 9, weight: .bold))
+                        .accessibilityHidden(true)
+
+                    Text("vs prev \(summary.text)")
+                        .font(.firaCode(10, weight: .medium).monospacedDigit())
+                }
+                .foregroundStyle(summary.color)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
@@ -297,6 +375,59 @@ struct ChartCard: View {
             )
             .frame(maxWidth: width == .infinity ? .infinity : width)
             .frame(height: height)
+    }
+
+    private func trendSummary(points: [ChartPoint]) -> TrendSummary? {
+        guard points.count >= 2,
+              let latest = points.last
+        else {
+            return nil
+        }
+
+        return trendSummary(for: latest, in: points)
+    }
+
+    private func trendSummary(for point: ChartPoint, in points: [ChartPoint]) -> TrendSummary? {
+        guard let index = points.firstIndex(of: point), index > 0 else {
+            return nil
+        }
+
+        let delta = point.value - points[index - 1].value
+        return TrendSummary(
+            text: formattedDelta(delta),
+            symbolName: symbolName(for: delta),
+            color: trendColor(for: delta),
+            accessibilityLabel: "Delta versus previous period \(formattedDelta(delta))"
+        )
+    }
+
+    private func formattedDelta(_ delta: Double) -> String {
+        let sign = delta > 0 ? "+" : delta < 0 ? "-" : ""
+        return "\(sign)\(formattedValue(abs(delta)))"
+    }
+
+    private func symbolName(for delta: Double) -> String {
+        if delta > 0 {
+            return "arrow.up.right"
+        }
+
+        if delta < 0 {
+            return "arrow.down.right"
+        }
+
+        return "arrow.right"
+    }
+
+    private func trendColor(for delta: Double) -> Color {
+        if delta > 0 {
+            return color
+        }
+
+        if delta < 0 {
+            return Color.recoveryRed
+        }
+
+        return Color.textDim
     }
 
     private func latestValueText(points: [ChartPoint]) -> String {
@@ -330,6 +461,14 @@ struct ChartCard: View {
         }
 
         return "\(number) \(unit)"
+    }
+
+    private func axisLabel(_ value: Double) -> String {
+        if abs(value) >= 100 || unit != "" {
+            return value.formatted(.number.precision(.fractionLength(0)))
+        }
+
+        return value.formatted(.number.precision(.fractionLength(1)))
     }
 
     private func xDomain(points: [ChartPoint]) -> ClosedRange<Date> {
@@ -393,11 +532,16 @@ struct ChartCard: View {
     private func startSkeletonAnimation() {
         guard isLoading, reduceMotion == false else {
             skeletonPulse = false
+            skeletonPhase = 0
             return
         }
 
         withAnimation(.easeInOut(duration: 0.95).repeatForever(autoreverses: true)) {
             skeletonPulse = true
+        }
+
+        withAnimation(.linear(duration: 1.8).repeatForever(autoreverses: false)) {
+            skeletonPhase = .pi * 2
         }
     }
 
@@ -426,5 +570,50 @@ struct ChartCard: View {
         let id: String
         let date: Date
         let value: Double
+    }
+
+    private struct TrendSummary {
+        let text: String
+        let symbolName: String
+        let color: Color
+        let accessibilityLabel: String
+    }
+}
+
+private struct SkeletonSineWave: Shape {
+    var phase: CGFloat
+
+    var animatableData: CGFloat {
+        get { phase }
+        set { phase = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let midY = rect.midY
+        let amplitude = max(rect.height * 0.16, 12)
+        let frequency: CGFloat = 2.6
+        let step = max(rect.width / 44, 3)
+
+        var x = rect.minX
+        var isFirstPoint = true
+
+        while x <= rect.maxX {
+            let progress = (x - rect.minX) / max(rect.width, 1)
+            let wave = CGFloat(sin(Double(progress * .pi * frequency + phase)))
+            let y = midY + wave * amplitude
+            let point = CGPoint(x: x, y: y)
+
+            if isFirstPoint {
+                path.move(to: point)
+                isFirstPoint = false
+            } else {
+                path.addLine(to: point)
+            }
+
+            x += step
+        }
+
+        return path
     }
 }

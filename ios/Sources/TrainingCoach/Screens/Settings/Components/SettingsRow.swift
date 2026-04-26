@@ -5,6 +5,7 @@ struct SettingsRow<Accessory: View>: View {
     private let systemImage: String
     private let title: String
     private let subtitle: String?
+    private let iconColor: Color
     private let showsChevron: Bool
     private let isDestructive: Bool
     private let action: (() -> Void)?
@@ -14,6 +15,7 @@ struct SettingsRow<Accessory: View>: View {
         systemImage: String,
         title: String,
         subtitle: String? = nil,
+        iconColor: Color = Color.primaryLight,
         showsChevron: Bool = false,
         isDestructive: Bool = false,
         action: (() -> Void)? = nil,
@@ -22,6 +24,7 @@ struct SettingsRow<Accessory: View>: View {
         self.systemImage = systemImage
         self.title = title
         self.subtitle = subtitle
+        self.iconColor = iconColor
         self.showsChevron = showsChevron
         self.isDestructive = isDestructive
         self.action = action
@@ -45,11 +48,11 @@ struct SettingsRow<Accessory: View>: View {
     private var rowContent: some View {
         HStack(spacing: 14) {
             Image(systemName: systemImage)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(isDestructive ? Color.recoveryRed : Color.primaryLight)
-                .frame(width: 34, height: 34)
-                .background((isDestructive ? Color.recoveryRed : Color.primaryLight).opacity(0.14))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(rowIconColor)
+                .frame(width: 36, height: 36)
+                .background(rowIconColor.opacity(0.15))
+                .clipShape(Circle())
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -73,6 +76,7 @@ struct SettingsRow<Accessory: View>: View {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color.textDim)
+                    .frame(width: 16, alignment: .trailing)
                     .accessibilityHidden(true)
             }
         }
@@ -85,6 +89,10 @@ struct SettingsRow<Accessory: View>: View {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         action?()
     }
+
+    private var rowIconColor: Color {
+        isDestructive ? Color.recoveryRed : iconColor
+    }
 }
 
 extension SettingsRow where Accessory == EmptyView {
@@ -92,6 +100,7 @@ extension SettingsRow where Accessory == EmptyView {
         systemImage: String,
         title: String,
         subtitle: String? = nil,
+        iconColor: Color = Color.primaryLight,
         showsChevron: Bool = false,
         isDestructive: Bool = false,
         action: (() -> Void)? = nil
@@ -100,6 +109,7 @@ extension SettingsRow where Accessory == EmptyView {
             systemImage: systemImage,
             title: title,
             subtitle: subtitle,
+            iconColor: iconColor,
             showsChevron: showsChevron,
             isDestructive: isDestructive,
             action: action

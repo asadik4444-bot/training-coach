@@ -9,13 +9,18 @@ struct DayDetailSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                header
+                hero
 
-                VStack(alignment: .leading, spacing: 12) {
-                    detailRow("HRV", value: hrvText)
-                    detailRow("RHR", value: rhrText)
-                    detailRow("Sleep efficiency", value: sleepEfficiencyText)
-                    detailRow("Last workout", value: workoutText)
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 12) {
+                        breakdownCard("HRV", value: hrvText, detail: "RMSSD", color: recoveryColor)
+                        breakdownCard("RHR", value: rhrText, detail: "Resting", color: Color.primaryLight)
+                    }
+
+                    HStack(spacing: 12) {
+                        breakdownCard("Sleep", value: sleepEfficiencyText, detail: "Efficiency", color: Color.accent)
+                        breakdownCard("Workout", value: workoutText, detail: "Latest", color: Color.textMuted)
+                    }
 
                     if let decision = entry.decision {
                         decisionSection(decision)
@@ -46,47 +51,94 @@ struct DayDetailSheet: View {
         .presentationDetents([.medium, .large])
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private var hero: some View {
+        VStack(alignment: .leading, spacing: 18) {
             Text(longDate)
-                .font(.firaSans(13, weight: .semibold))
-                .foregroundStyle(Color.textDim)
-                .textCase(.uppercase)
+                .font(.firaSans(28, weight: .bold))
+                .foregroundStyle(Color.text)
+                .fixedSize(horizontal: false, vertical: true)
 
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(recoveryScoreText)
-                    .font(.heroNumber)
-                    .foregroundStyle(Color.text)
-                    .monospacedDigit()
-
+            HStack(alignment: .center, spacing: 16) {
                 Text(recoveryBandEmoji)
-                    .font(.system(size: 34))
+                    .font(.system(size: 42))
+                    .frame(width: 58, height: 58)
+                    .background(recoveryColor.opacity(0.16), in: Circle())
+                    .shadow(color: recoveryColor.opacity(0.45), radius: 18)
                     .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("RECOVERY")
+                        .font(.firaSans(11, weight: .semibold))
+                        .foregroundStyle(Color.textDim)
+                        .tracking(1.2)
+
+                    Text(recoveryScoreText)
+                        .font(.heroNumber)
+                        .foregroundStyle(recoveryColor)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.62)
+                        .shadow(color: recoveryColor.opacity(0.68), radius: 18)
+                }
             }
         }
+        .padding(20)
+        .background(
+            LinearGradient(
+                colors: [
+                    recoveryColor.opacity(0.2),
+                    Color.bgCard,
+                    Color.bg
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(recoveryColor.opacity(0.4), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.4), radius: 12, y: 4)
         .accessibilityElement(children: .combine)
     }
 
-    private func detailRow(_ title: String, value: String) -> some View {
-        HStack(alignment: .firstTextBaseline) {
+    private func breakdownCard(_ title: String, value: String, detail: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.firaSans(13, weight: .medium))
+                .font(.firaSans(11, weight: .semibold))
                 .foregroundStyle(Color.textDim)
-
-            Spacer(minLength: 16)
+                .textCase(.uppercase)
+                .tracking(0.8)
 
             Text(value)
-                .font(.firaSans(15, weight: .medium))
-                .foregroundStyle(Color.text)
-                .multilineTextAlignment(.trailing)
+                .font(.firaCode(16, weight: .medium).monospacedDigit())
+                .foregroundStyle(color)
+                .lineLimit(3)
+                .minimumScaleFactor(0.72)
+
+            Text(detail)
+                .font(.firaSans(12, weight: .medium))
+                .foregroundStyle(Color.textDim)
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 14)
-        .background(Color.bgCard, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .frame(maxWidth: .infinity, minHeight: 104, alignment: .leading)
+        .padding(14)
+        .background(
+            LinearGradient(
+                colors: [
+                    Color.bgCard,
+                    Color.bg
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
         .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.border, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.border.opacity(0.7), lineWidth: 1)
         }
+        .shadow(color: .black.opacity(0.4), radius: 12, y: 4)
         .accessibilityElement(children: .combine)
     }
 
@@ -116,11 +168,22 @@ struct DayDetailSheet: View {
             }
         }
         .padding(16)
-        .background(Color.bgCard, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(
+            LinearGradient(
+                colors: [
+                    Color.bgCard,
+                    Color.bg
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
         .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.border, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.border.opacity(0.7), lineWidth: 1)
         }
+        .shadow(color: .black.opacity(0.4), radius: 12, y: 4)
     }
 
     private func decisionPill(_ text: String) -> some View {
@@ -159,10 +222,10 @@ struct DayDetailSheet: View {
 
     private var recoveryScoreText: String {
         guard let score = recovery?.score else {
-            return "--"
+            return "--%"
         }
 
-        return "\(score)"
+        return "\(score)%"
     }
 
     private var recoveryBandEmoji: String {
@@ -171,6 +234,14 @@ struct DayDetailSheet: View {
         }
 
         return RecoveryBand.from(score: score).emoji
+    }
+
+    private var recoveryColor: Color {
+        guard let score = recovery?.score else {
+            return Color.textDim
+        }
+
+        return RecoveryBand.from(score: score).color
     }
 
     private var hrvText: String {

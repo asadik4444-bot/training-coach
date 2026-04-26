@@ -4,28 +4,23 @@ import UIKit
 struct WorkoutRow: View {
     let item: WorkoutItem
 
-    @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 28
-    @ScaledMetric(relativeTo: .body) private var strainSize: CGFloat = 18
+    @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 20
+    @ScaledMetric(relativeTo: .body) private var strainSize: CGFloat = 24
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 13) {
             Image(systemName: sportSymbol)
                 .font(.system(size: iconSize, weight: .semibold))
                 .foregroundStyle(strainColor)
                 .frame(width: 36, height: 36)
-                .background(strainColor.opacity(0.12))
+                .background(Color.primaryLight.opacity(0.15))
                 .clipShape(Circle())
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(sportLabel)
                     .font(.firaSans(15, weight: .medium))
                     .foregroundStyle(Color.text)
-                    .lineLimit(1)
-
-                Text("\(strainText) strain")
-                    .font(.firaCode(strainSize, weight: .medium).monospacedDigit())
-                    .foregroundStyle(strainColor)
                     .lineLimit(1)
 
                 Text(heartRateText)
@@ -36,22 +31,31 @@ struct WorkoutRow: View {
 
             Spacer(minLength: 12)
 
-            Text(relativeDate)
-                .font(.captionApp)
-                .foregroundStyle(Color.textDim)
-                .multilineTextAlignment(.trailing)
-                .lineLimit(2)
-                .frame(minWidth: 58, alignment: .trailing)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(strainText)
+                    .font(.firaCode(strainSize, weight: .medium).monospacedDigit())
+                    .foregroundStyle(strainColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+
+                Text(relativeDate)
+                    .font(.captionApp)
+                    .foregroundStyle(Color.textDim)
+                    .multilineTextAlignment(.trailing)
+                    .lineLimit(2)
+            }
+            .frame(minWidth: 72, alignment: .trailing)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
-        .background(Color.bgCard.opacity(0.72))
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
+        .background(cardGradient)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.border.opacity(0.7), lineWidth: 1)
         }
+        .shadow(color: Color.black.opacity(0.2), radius: 14, y: 7)
         .contentShape(Rectangle())
         .simultaneousGesture(
             TapGesture().onEnded {
@@ -156,11 +160,11 @@ struct WorkoutRow: View {
         let today = calendar.startOfDay(for: Date())
         let daysAgo = calendar.dateComponents([.day], from: startDay, to: today).day ?? 0
 
-        if daysAgo > 0 {
+        if daysAgo > 0 && daysAgo <= 6 {
             return "\(daysAgo)d ago"
         }
 
-        return start.formatted(.dateTime.month(.abbreviated).day())
+        return start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
     }
 
     private var accessibilityLabel: String {
@@ -181,5 +185,17 @@ struct WorkoutRow: View {
         }
 
         return "\(value) \(label)"
+    }
+
+    private var cardGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.bgCard.opacity(0.98),
+                strainColor.opacity(0.08),
+                Color.bgSurface.opacity(0.9)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }
