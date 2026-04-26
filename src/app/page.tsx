@@ -30,23 +30,12 @@ async function isAuthorized(
   const expected = process.env.DASHBOARD_SECRET;
   if (!expected) return false;
 
-  // Check cookie first
+  // Check cookie first — token format is "${expiryUnix}:${sigHex}"
   const cookieStore = await cookies();
   const session = cookieStore.get("tc_session")?.value;
   if (session) {
-    const enc = new TextEncoder();
-    const cryptoKey = await crypto.subtle.importKey(
-      "raw",
-      enc.encode(expected),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"],
-    );
-    const sig = await crypto.subtle.sign("HMAC", cryptoKey, enc.encode("ok"));
-    const sigHex = Array.from(new Uint8Array(sig))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-    if (session === sigHex) return true;
+    const { verifyToken } = await import("@/app/api/auth/dashboard/route");
+    if (await verifyToken(session, expected)) return true;
   }
 
   // Fall back: accept ?key= directly (user will be redirected to set cookie next time)
