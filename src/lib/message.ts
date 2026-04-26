@@ -14,8 +14,12 @@ export function composeMessage(
     return `${head}. Skip planned ${today.type}. Z2 walk 30 min + mobility only.`;
   }
 
-  const intensityNote =
-    c.band === "yellow" ? " (yellow — 70% volume; cut last set of each)" : "";
-
-  return `${head}. Today: ${today.summary}${intensityNote}.`;
+  if (c.band === "yellow") {
+    const note =
+      today.type === "run"
+        ? " (yellow — drop pace to easy, cap at HR zone 2)"
+        : " (yellow — 70% volume; cut last set of each)";
+    return `${head}. Today: ${today.summary}${note}.`;
+  }
+  return `${head}. Today: ${today.summary}.`;
 }

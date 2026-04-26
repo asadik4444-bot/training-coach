@@ -22,4 +22,14 @@ describe("composeMessage", () => {
     const msg = composeMessage(70, null);
     expect(msg).toMatch(/rest|off/i);
   });
+  it("yellow recovery on a lift day contains 'cut last set'", () => {
+    const msg = composeMessage(55, { type: "lift", summary: "Bench 4x8" });
+    expect(msg).toContain("cut last set");
+    expect(msg).not.toContain("zone 2");
+  });
+  it("yellow recovery on a run day contains zone 2 cue and not 'cut last set'", () => {
+    const msg = composeMessage(55, { type: "run", summary: "Z2 run 45 min" });
+    expect(msg).toMatch(/easy|zone 2/i);
+    expect(msg).not.toContain("cut last set");
+  });
 });
