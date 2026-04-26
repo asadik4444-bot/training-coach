@@ -4,6 +4,7 @@ import {
   isSkipped,
   listAllGoals,
   listProtein,
+  listBedtimes,
 } from "@/lib/kv";
 import { computeTrends } from "@/lib/trends";
 import { computeStreaks } from "@/lib/streak";
@@ -234,6 +235,7 @@ export default async function Page({ searchParams }: Props) {
     snaps91,
     goals,
     proteinHistory,
+    bedtimes30,
   ] = (await Promise.all([
     listBiometricSnapshots(30),
     listBiometricSnapshots(60),
@@ -242,6 +244,7 @@ export default async function Page({ searchParams }: Props) {
     listBiometricSnapshots(91),
     listAllGoals(),
     listProtein(7),
+    listBedtimes(30),
   ])) as [
     BiometricSnapshot[],
     BiometricSnapshot[],
@@ -250,6 +253,7 @@ export default async function Page({ searchParams }: Props) {
     BiometricSnapshot[],
     Awaited<ReturnType<typeof listAllGoals>>,
     Array<{ date: string; hit: boolean }>,
+    Array<{ date: string; time: string }>,
   ];
 
   const trends = computeTrends(snaps30);
@@ -443,6 +447,48 @@ export default async function Page({ searchParams }: Props) {
     proteinHistory.length > 0
       ? Math.round((proteinHits / proteinHistory.length) * 100)
       : null;
+
+  // Bedtime consistency
+  // Bedtimes stored as "HH:MM" strings — convert to minutes-since-midnight
+  // treating post-midnight (00:xx–03:xx) as 24h+ so the mean is sensible
+  function bedtimeToMinutes(t: string): number {
+    const [h, m] = t.split(":").map(Number);
+    const mins = (h ?? 0) * 60 + (m ?? 0);
+    // Treat early morning (before 4 AM) as after midnight (>1440)
+    return mins < 240 ? mins + 1440 : mins;
+  }
+  function minutesToHHMM(mins: number): string {
+    const normalized = mins % 1440;
+    const h = Math.floor(normalized / 60);
+    const m = Math.round(normalized % 60);
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  }
+  const bedtimeMins = bedtimes30.map((b) => bedtimeToMinutes(b.time));
+  const bedtimeAvgMin =
+    bedtimeMins.length > 0
+      ? bedtimeMins.reduce((a, b) => a + b, 0) / bedtimeMins.length
+      : null;
+  let bedtimeStdev: number | null = null;
+  if (bedtimeMins.length >= 2 && bedtimeAvgMin != null) {
+    const variance =
+      bedtimeMins.reduce((acc, v) => acc + (v - bedtimeAvgMin) ** 2, 0) /
+      (bedtimeMins.length - 1);
+    bedtimeStdev = Math.sqrt(variance);
+  }
+  const bedtimeAvgStr =
+    bedtimeAvgMin != null ? minutesToHHMM(bedtimeAvgMin) : null;
+  const bedtimeConsistencyColor =
+    bedtimeStdev == null
+      ? "var(--text-muted)"
+      : bedtimeStdev < 30
+        ? "var(--green)"
+        : bedtimeStdev < 60
+          ? "var(--yellow)"
+          : "var(--red)";
+  // Last 14 nights for sparkline (minutes since midnight)
+  const bedtimeSpark = bedtimes30
+    .slice(-14)
+    .map((b) => bedtimeToMinutes(b.time));
 
   // Recent workouts
   const recentWorkouts = snaps30
@@ -702,6 +748,109 @@ export default async function Page({ searchParams }: Props) {
                 unit=""
               />
             </Widget>
+
+            {/* Bedtime consistency widget */}
+            {bedtimes30.length >= 2 && (
+              <Widget title="BEDTIME CONSISTENCY">
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    marginBottom: "0.5rem",
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontSize: "1.6rem",
+                        fontFamily: "var(--font-mono)",
+                        fontWeight: 700,
+                        color: "var(--text)",
+                        lineHeight: 1.1,
+                      }}
+                    >
+                      {bedtimeAvgStr ?? "—"}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "0.75rem",
+                        color: "var(--text-dim)",
+                        marginTop: "0.15rem",
+                      }}
+                    >
+                      30-day avg
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div
+                      style={{
+                        fontSize: "1.3rem",
+                        fontFamily: "var(--font-mono)",
+                        fontWeight: 700,
+                        color: bedtimeConsistencyColor,
+                        lineHeight: 1.1,
+                      }}
+                    >
+                      {bedtimeStdev != null
+                        ? `±${Math.round(bedtimeStdev)}m`
+                        : "—"}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "0.75rem",
+                        color: "var(--text-dim)",
+                        marginTop: "0.15rem",
+                      }}
+                    >
+                      std dev
+                    </div>
+                  </div>
+                </div>
+                {/* 14-night sparkline */}
+                {bedtimeSpark.length >= 2 &&
+                  (() => {
+                    const min = Math.min(...bedtimeSpark);
+                    const max = Math.max(...bedtimeSpark);
+                    const range = max - min || 1;
+                    const w = 280;
+                    const h = 40;
+                    const pts = bedtimeSpark
+                      .map((v, i) => {
+                        const x = (i / (bedtimeSpark.length - 1)) * w;
+                        const y = h - ((v - min) / range) * (h - 4) - 2;
+                        return `${x.toFixed(1)},${y.toFixed(1)}`;
+                      })
+                      .join(" ");
+                    return (
+                      <svg
+                        width="100%"
+                        height={h}
+                        viewBox={`0 0 ${w} ${h}`}
+                        preserveAspectRatio="none"
+                      >
+                        <polyline
+                          points={pts}
+                          fill="none"
+                          stroke={bedtimeConsistencyColor}
+                          strokeWidth="1.8"
+                          strokeLinejoin="round"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    );
+                  })()}
+                <div
+                  style={{
+                    marginTop: "0.25rem",
+                    fontSize: "0.72rem",
+                    color: "var(--text-dim)",
+                  }}
+                >
+                  {bedtimes30.length} nights logged · last 14 nights shown
+                </div>
+              </Widget>
+            )}
 
             {/* Week-over-week comparison */}
             <Widget title="WEEK OVER WEEK">
