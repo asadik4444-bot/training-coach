@@ -58,12 +58,25 @@ export async function GET(req: NextRequest) {
     let todayPlan = pickToday(plan, effectiveWeekday);
 
     const accessToken = await refreshAccessToken();
-    const recoveryPct = await fetchLatestRecovery(accessToken);
+    const recovery = await fetchLatestRecovery(accessToken);
 
-    const text = composeMessage(recoveryPct, todayPlan);
+    let text: string;
+    if (recovery.status === "scored") {
+      text = composeMessage(recovery.score, todayPlan);
+    } else if (recovery.status === "pending") {
+      text = `Recovery still computing on Whoop's side. I'll send today's plan once it's ready (try /api/cron/daily later).`;
+    } else if (recovery.status === "unscorable") {
+      text = `Whoop reports unscorable recovery (likely a sensor issue overnight). Default to Z2 + mobility today.`;
+    } else {
+      text = `No Whoop recovery record yet today. Default to a moderate session if you feel good.`;
+    }
     await sendTelegram(text);
 
-    return NextResponse.json({ ok: true, recoveryPct, sent: text });
+    return NextResponse.json({
+      ok: true,
+      recoveryStatus: recovery.status,
+      sent: text,
+    });
   } catch (e) {
     const msg = String(e);
     try {

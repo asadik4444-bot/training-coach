@@ -71,27 +71,34 @@ export async function refreshAccessToken(): Promise<string> {
   return data.access_token;
 }
 
+export type RecoveryFetchResult =
+  | { status: "scored"; score: number }
+  | { status: "pending" }
+  | { status: "unscorable" }
+  | { status: "no_record" };
+
 export async function fetchLatestRecovery(
   accessToken: string,
-): Promise<number> {
+): Promise<RecoveryFetchResult> {
   const res = await fetch(`${WHOOP_API}/recovery?limit=1`, {
     headers: { authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok)
-    throw new Error(
-      `Whoop recovery fetch failed: ${res.status} ${await res.text()}`,
-    );
+  if (!res.ok) {
+    throw new Error(`Whoop recovery fetch failed: ${res.status}`);
+  }
   const data = (await res.json()) as {
-    records?: Array<{ score?: { recovery_score?: number } }>;
+    records?: Array<{
+      score_state?: string;
+      score?: { recovery_score?: number };
+    }>;
   };
   const records = data.records ?? [];
-  if (records.length === 0)
-    throw new Error("No recovery records returned by Whoop");
-  const score = records[0].score?.recovery_score;
-  if (score == null) {
-    throw new Error(
-      "Whoop recovery score not yet available — retry after sync",
-    );
+  if (records.length === 0) return { status: "no_record" };
+  const rec = records[0];
+  const state = rec.score_state;
+  if (state === "SCORED" && typeof rec.score?.recovery_score === "number") {
+    return { status: "scored", score: Math.round(rec.score.recovery_score) };
   }
-  return Math.round(score);
+  if (state === "UNSCORABLE") return { status: "unscorable" };
+  return { status: "pending" };
 }
