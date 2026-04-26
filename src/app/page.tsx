@@ -2,6 +2,8 @@ import {
   listBiometricSnapshots,
   listBodyMeasurements,
   isSkipped,
+  listAllGoals,
+  listProtein,
 } from "@/lib/kv";
 import { computeTrends } from "@/lib/trends";
 import { computeStreaks } from "@/lib/streak";
@@ -11,6 +13,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { parsePlan, pickToday } from "@/lib/plan";
 import { cookies } from "next/headers";
+import { opener } from "@/lib/voice";
+import { classifyRecovery } from "@/lib/recovery";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -74,19 +78,35 @@ function UnauthorizedView() {
   );
 }
 
-// ── SVG Charts ────────────────────────────────────────────────────────────────
+// ── Progress bar helper ───────────────────────────────────────────────────────
 
-function HrvChart({ values }: { values: number[] }) {
-  if (values.length < 2) return <div style={{ color: "#475569" }}>No data</div>;
+function progressBar(current: number, goal: number, segments = 5): string {
+  const ratio = Math.min(1, Math.max(0, current / goal));
+  const filled = Math.round(ratio * segments);
+  return "▰".repeat(filled) + "▱".repeat(segments - filled);
+}
+
+// ── SVG Sparkline ─────────────────────────────────────────────────────────────
+
+function Sparkline({
+  values,
+  color = "#4ade80",
+  height = 60,
+}: {
+  values: number[];
+  color?: string;
+  height?: number;
+}) {
+  if (values.length < 2) return <span style={{ color: "#475569" }}>—</span>;
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
-  const w = 300;
-  const h = 80;
+  const w = 280;
+  const h = height;
   const points = values
     .map((v, i) => {
       const x = (i / (values.length - 1)) * w;
-      const y = h - ((v - min) / range) * (h - 4) - 2;
+      const y = h - ((v - min) / range) * (h - 6) - 3;
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(" ");
@@ -100,41 +120,100 @@ function HrvChart({ values }: { values: number[] }) {
       <polyline
         points={points}
         fill="none"
-        stroke="#4ade80"
-        strokeWidth="2"
+        stroke={color}
+        strokeWidth="1.8"
         strokeLinejoin="round"
+        strokeLinecap="round"
       />
     </svg>
   );
 }
 
-function RecoveryBars({ scores }: { scores: (number | null)[] }) {
-  const w = 300;
-  const h = 80;
-  const barW = w / scores.length;
+// ── 90-day heatmap ────────────────────────────────────────────────────────────
+
+function RecoveryHeatmap({
+  scores,
+}: {
+  scores: Array<{ date: string; score: number | null }>;
+}) {
+  // Build 13 columns × 7 rows grid (Sun–Sat), most-recent column on the right
+  // Pad start so the first cell is Sunday
+  const firstDate = scores.length > 0 ? scores[0].date : null;
+  const startDow = firstDate
+    ? new Date(firstDate + "T12:00:00Z").getUTCDay()
+    : 0;
+
+  const cells: Array<{ date: string; score: number | null } | null> = [
+    ...Array(startDow).fill(null),
+    ...scores,
+  ];
+
+  // Pad to multiple of 7
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const weeks: Array<Array<{ date: string; score: number | null } | null>> = [];
+  for (let i = 0; i < cells.length; i += 7) {
+    weeks.push(cells.slice(i, i + 7));
+  }
+
+  const cellSize = 14;
+  const gap = 2;
+  const cols = weeks.length;
+  const rows = 7;
+  const svgW = cols * (cellSize + gap) - gap;
+  const svgH = rows * (cellSize + gap) - gap;
+
   return (
-    <svg
-      width="100%"
-      height={h}
-      viewBox={`0 0 ${w} ${h}`}
-      preserveAspectRatio="none"
-    >
-      {scores.map((s, i) => {
-        if (s == null) return null;
-        const color = s >= 67 ? "#4ade80" : s >= 34 ? "#facc15" : "#ef4444";
-        const barH = (s / 100) * h;
-        return (
-          <rect
-            key={i}
-            x={i * barW}
-            y={h - barH}
-            width={Math.max(barW - 1, 0.5)}
-            height={barH}
-            fill={color}
-          />
-        );
-      })}
-    </svg>
+    <div>
+      <svg width="100%" viewBox={`0 0 ${svgW} ${svgH}`}>
+        {weeks.map((week, wi) =>
+          week.map((cell, di) => {
+            if (!cell) return null;
+            const x = wi * (cellSize + gap);
+            const y = di * (cellSize + gap);
+            const color =
+              cell.score == null
+                ? "#1e293b"
+                : cell.score >= 67
+                  ? "#4ade80"
+                  : cell.score >= 34
+                    ? "#facc15"
+                    : "#ef4444";
+            return (
+              <rect
+                key={`${wi}-${di}`}
+                x={x}
+                y={y}
+                width={cellSize}
+                height={cellSize}
+                rx="2"
+                fill={color}
+                opacity={cell.score == null ? 0.3 : 0.85}
+              />
+            );
+          }),
+        )}
+      </svg>
+      <div
+        style={{
+          display: "flex",
+          gap: "0.75rem",
+          marginTop: "0.4rem",
+          fontSize: "0.7rem",
+          color: "#64748b",
+        }}
+      >
+        <span>
+          <span style={{ color: "#4ade80" }}>■</span> Green ≥67%
+        </span>
+        <span>
+          <span style={{ color: "#facc15" }}>■</span> Yellow 34–66%
+        </span>
+        <span>
+          <span style={{ color: "#ef4444" }}>■</span> Red &lt;34%
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -176,7 +255,15 @@ function Widget({
 
 // ── Stat row helper ───────────────────────────────────────────────────────────
 
-function StatRow({ label, value }: { label: string; value: string }) {
+function StatRow({
+  label,
+  value,
+  delta,
+}: {
+  label: string;
+  value: string;
+  delta?: string;
+}) {
   return (
     <div
       style={{
@@ -187,9 +274,31 @@ function StatRow({ label, value }: { label: string; value: string }) {
       }}
     >
       <span style={{ color: "#94a3b8", fontSize: "0.875rem" }}>{label}</span>
-      <span style={{ fontWeight: 600, fontSize: "0.875rem" }}>{value}</span>
+      <span style={{ display: "flex", gap: "0.5rem", alignItems: "baseline" }}>
+        <span style={{ fontWeight: 600, fontSize: "0.875rem" }}>{value}</span>
+        {delta && (
+          <span style={{ fontSize: "0.75rem", color: "#64748b" }}>{delta}</span>
+        )}
+      </span>
     </div>
   );
+}
+
+// ── Week-over-week comparison helpers ─────────────────────────────────────────
+
+function wowDelta(
+  curr: number | null,
+  prev: number | null,
+  higherIsBetter: boolean,
+): string {
+  if (curr == null || prev == null || prev === 0) return "";
+  const diff = curr - prev;
+  const pct = (diff / prev) * 100;
+  const arrow = diff > 0 ? "↑" : diff < 0 ? "↓" : "→";
+  const sign = diff > 0 ? "+" : "";
+  const good = higherIsBetter ? diff > 0 : diff < 0;
+  const color = good ? "#4ade80" : diff === 0 ? "#94a3b8" : "#f87171";
+  return `<span style="color:${color}">${arrow} ${sign}${pct.toFixed(1)}%</span>`;
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
@@ -202,16 +311,33 @@ export default async function Page({ searchParams }: Props) {
   const showDetail = detail === "1";
 
   // ── Data fetching ──────────────────────────────────────────────────────────
-  const [snaps30raw, snaps60raw, weightHistory, waistHistory] =
-    await Promise.all([
-      listBiometricSnapshots(30),
-      listBiometricSnapshots(60),
-      listBodyMeasurements("weight", 30),
-      listBodyMeasurements("waist", 30),
-    ]);
+  const dataFetches: Promise<unknown>[] = [
+    listBiometricSnapshots(30),
+    listBiometricSnapshots(60),
+    listBodyMeasurements("weight", 30),
+    listBodyMeasurements("waist", 30),
+  ];
 
-  const snaps30 = snaps30raw as BiometricSnapshot[];
-  const snaps60 = snaps60raw as BiometricSnapshot[];
+  if (showDetail) {
+    dataFetches.push(
+      listBiometricSnapshots(90),
+      listAllGoals(),
+      listProtein(7),
+    );
+  }
+
+  const results = await Promise.all(dataFetches);
+  const snaps30 = results[0] as BiometricSnapshot[];
+  const snaps60 = results[1] as BiometricSnapshot[];
+  const weightHistory = results[2] as Array<{ date: string; value: number }>;
+  const waistHistory = results[3] as Array<{ date: string; value: number }>;
+  const snaps90 = showDetail ? (results[4] as BiometricSnapshot[]) : [];
+  const goals = showDetail
+    ? (results[5] as Awaited<ReturnType<typeof listAllGoals>>)
+    : null;
+  const proteinHistory = showDetail
+    ? (results[6] as Array<{ date: string; hit: boolean }>)
+    : [];
 
   const trends = computeTrends(snaps30);
   const metrics = toMetrics(snaps30);
@@ -251,45 +377,10 @@ export default async function Page({ searchParams }: Props) {
     // plan read is non-critical
   }
 
-  // HRV values for chart
-  const hrvValues = snaps30
-    .filter((s) => typeof s.recovery.hrv_rmssd_ms === "number")
-    .map((s) => s.recovery.hrv_rmssd_ms as number);
-
-  const hrvAvg =
-    hrvValues.length > 0
-      ? hrvValues.reduce((a, b) => a + b, 0) / hrvValues.length
-      : null;
-
-  const hrvLatest = todaySnap?.recovery.hrv_rmssd_ms ?? null;
-
-  // CV
-  let hrvCv: number | null = null;
-  if (hrvValues.length >= 2 && hrvAvg && hrvAvg > 0) {
-    const variance =
-      hrvValues.reduce((acc, v) => acc + (v - hrvAvg) ** 2, 0) /
-      (hrvValues.length - 1);
-    hrvCv = (Math.sqrt(variance) / hrvAvg) * 100;
-  }
-
-  // Recovery scores for bar chart (30 days, preserving gaps as null)
-  const recByDate = new Map<string, number | null>();
-  for (const s of snaps30) {
-    recByDate.set(
-      s.date,
-      s.recovery.status === "scored" && s.recovery.score != null
-        ? s.recovery.score
-        : null,
-    );
-  }
-  const recScores: (number | null)[] = snaps30.map(
-    (s) => recByDate.get(s.date) ?? null,
-  );
-
   // Today's recovery info
   const rec = todaySnap?.recovery;
-  const recStr =
-    rec?.status === "scored" ? `${rec.score ?? "?"}%` : (rec?.status ?? "—");
+  const recScore = rec?.status === "scored" ? (rec.score ?? null) : null;
+  const recStr = recScore != null ? `${recScore}%` : (rec?.status ?? "—");
   const hrvStr =
     rec?.hrv_rmssd_ms != null ? `${Math.round(rec.hrv_rmssd_ms)}ms` : "—";
   const rhrStr = rec?.rhr_bpm != null ? `${rec.rhr_bpm}bpm` : "—";
@@ -304,23 +395,102 @@ export default async function Page({ searchParams }: Props) {
     return ` (${h}h${m}m)`;
   })();
 
-  // Recovery color
+  // Recovery band + color
+  const recBand =
+    recScore != null ? classifyRecovery(recScore).band : ("red" as const);
   const recColor =
-    rec?.status === "scored" && rec.score != null
-      ? rec.score >= 67
+    recScore != null
+      ? recScore >= 67
         ? "#4ade80"
-        : rec.score >= 34
+        : recScore >= 34
           ? "#facc15"
           : "#ef4444"
       : "#94a3b8";
 
-  // Recent workouts
-  const recentWorkouts = snaps30
-    .filter((s) => s.last_workout != null)
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 5);
+  // Coach voice opener
+  const coachOpener = opener(recBand);
 
-  // Body comp
+  // HRV sparkline values
+  const hrvValues = snaps30
+    .filter((s) => typeof s.recovery.hrv_rmssd_ms === "number")
+    .map((s) => s.recovery.hrv_rmssd_ms as number);
+
+  const hrvAvg =
+    hrvValues.length > 0
+      ? hrvValues.reduce((a, b) => a + b, 0) / hrvValues.length
+      : null;
+
+  const hrvLatest = todaySnap?.recovery.hrv_rmssd_ms ?? null;
+
+  // HRV CV
+  let hrvCv: number | null = null;
+  if (hrvValues.length >= 2 && hrvAvg && hrvAvg > 0) {
+    const variance =
+      hrvValues.reduce((acc, v) => acc + (v - hrvAvg) ** 2, 0) /
+      (hrvValues.length - 1);
+    hrvCv = (Math.sqrt(variance) / hrvAvg) * 100;
+  }
+
+  // RHR sparkline values
+  const rhrValues = snaps30
+    .filter((s) => typeof s.recovery.rhr_bpm === "number")
+    .map((s) => s.recovery.rhr_bpm as number);
+
+  // Sleep efficiency sparkline values
+  const sleepValues = snaps30
+    .filter((s) => s.sleep != null)
+    .map((s) => s.sleep!.efficiency_pct);
+
+  // 90-day heatmap data
+  const heatmapScores: Array<{ date: string; score: number | null }> =
+    snaps90.map((s) => ({
+      date: s.date,
+      score:
+        s.recovery.status === "scored" && s.recovery.score != null
+          ? s.recovery.score
+          : null,
+    }));
+
+  // Week-over-week: split snaps30 into this-week (0..6) and last-week (7..13)
+  const snapsByDaysAgo = new Map<number, BiometricSnapshot>();
+  for (const s of snaps60) {
+    const todayMs = new Date(todayISO + "T00:00:00Z").getTime();
+    const snapMs = new Date(s.date + "T00:00:00Z").getTime();
+    const diff = Math.round((todayMs - snapMs) / (24 * 3600 * 1000));
+    if (diff >= 0) snapsByDaysAgo.set(diff, s);
+  }
+
+  function weekAvg(
+    getter: (s: BiometricSnapshot) => number | null | undefined,
+    startDay: number,
+    endDay: number,
+  ): number | null {
+    const vals: number[] = [];
+    for (let d = startDay; d <= endDay; d++) {
+      const s = snapsByDaysAgo.get(d);
+      if (!s) continue;
+      const v = getter(s);
+      if (typeof v === "number") vals.push(v);
+    }
+    return vals.length > 0
+      ? vals.reduce((a, b) => a + b, 0) / vals.length
+      : null;
+  }
+
+  const wow = {
+    hrv_this: weekAvg((s) => s.recovery.hrv_rmssd_ms, 0, 6),
+    hrv_prev: weekAvg((s) => s.recovery.hrv_rmssd_ms, 7, 13),
+    rhr_this: weekAvg((s) => s.recovery.rhr_bpm, 0, 6),
+    rhr_prev: weekAvg((s) => s.recovery.rhr_bpm, 7, 13),
+    sleep_this: weekAvg((s) => s.sleep?.efficiency_pct, 0, 6),
+    sleep_prev: weekAvg((s) => s.sleep?.efficiency_pct, 7, 13),
+    strain_this: weekAvg((s) => s.cycle?.strain, 0, 6),
+    strain_prev: weekAvg((s) => s.cycle?.strain, 7, 13),
+  };
+
+  // Goals progress
+  const latestHrv = hrvLatest;
+  const latestRhr = todaySnap?.recovery.rhr_bpm ?? null;
   const latestWeight =
     weightHistory.length > 0
       ? weightHistory[weightHistory.length - 1].value
@@ -329,6 +499,23 @@ export default async function Page({ searchParams }: Props) {
     waistHistory.length > 0
       ? waistHistory[waistHistory.length - 1].value
       : null;
+
+  // Protein hit rate
+  const proteinHits = proteinHistory.filter((p) => p.hit).length;
+  const proteinRate =
+    proteinHistory.length > 0
+      ? Math.round((proteinHits / proteinHistory.length) * 100)
+      : null;
+
+  // Recent workouts
+  const recentWorkouts = snaps30
+    .filter((s) => s.last_workout != null)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 5);
+
+  // Body comp
+  const latestWeightStr = latestWeight != null ? `${latestWeight}kg` : "—";
+  const latestWaistStr = latestWaist != null ? `${latestWaist}cm` : "—";
 
   // ACWR note
   let acwrNote = "";
@@ -346,9 +533,17 @@ export default async function Page({ searchParams }: Props) {
     <>
       <style>{`
         * { box-sizing: border-box; }
-        body { margin: 0; }
+        body {
+          margin: 0;
+          background: #0f172a;
+          color: #e2e8f0;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+          -webkit-font-smoothing: antialiased;
+        }
         .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
         @media (max-width: 480px) { .two-col { grid-template-columns: 1fr; } }
+        a { color: inherit; text-decoration: none; }
+        a:hover { text-decoration: underline; }
       `}</style>
 
       <div
@@ -373,6 +568,7 @@ export default async function Page({ searchParams }: Props) {
               fontSize: "1.1rem",
               fontWeight: 700,
               letterSpacing: "0.05em",
+              color: "#f1f5f9",
             }}
           >
             TRAINING COACH
@@ -382,50 +578,143 @@ export default async function Page({ searchParams }: Props) {
           </span>
         </div>
 
-        {/* Today */}
-        <Widget title="TODAY">
+        {/* TODAY hero */}
+        <div
+          style={{
+            background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
+            borderRadius: "16px",
+            padding: "1.25rem 1.5rem",
+            marginBottom: "0.75rem",
+            border: `1px solid ${recColor}33`,
+            boxShadow: `0 0 20px ${recColor}18`,
+          }}
+        >
           <div
             style={{
-              fontSize: "2rem",
+              fontSize: "0.7rem",
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              color: "#64748b",
+              marginBottom: "0.6rem",
+              fontWeight: 600,
+            }}
+          >
+            TODAY
+          </div>
+
+          {/* Recovery score — big */}
+          <div
+            style={{
+              fontSize: "3rem",
               fontWeight: 800,
               color: recColor,
               lineHeight: 1,
-              marginBottom: "0.4rem",
+              marginBottom: "0.25rem",
+              fontVariantNumeric: "tabular-nums",
             }}
           >
-            Recovery {recStr}
+            {recStr}
           </div>
+
+          {/* Coach voice */}
           <div
             style={{
+              fontSize: "0.9rem",
               color: "#94a3b8",
-              fontSize: "0.875rem",
-              marginBottom: "0.5rem",
+              fontStyle: "italic",
+              marginBottom: "0.75rem",
+              lineHeight: 1.4,
             }}
           >
-            HRV {hrvStr} &middot; RHR {rhrStr} &middot; Sleep {sleepEffStr}
-            {sleepDurStr}
+            "{coachOpener}"
           </div>
+
+          {/* HRV / RHR / Sleep row */}
+          <div
+            style={{
+              display: "flex",
+              gap: "1rem",
+              fontSize: "0.8rem",
+              color: "#94a3b8",
+              marginBottom: todayPlan ? "0.75rem" : "0",
+              flexWrap: "wrap",
+            }}
+          >
+            <span>
+              HRV <strong style={{ color: "#cbd5e1" }}>{hrvStr}</strong>
+            </span>
+            <span>
+              RHR <strong style={{ color: "#cbd5e1" }}>{rhrStr}</strong>
+            </span>
+            <span>
+              Sleep{" "}
+              <strong style={{ color: "#cbd5e1" }}>
+                {sleepEffStr}
+                {sleepDurStr}
+              </strong>
+            </span>
+          </div>
+
+          {/* Today's plan */}
           {todayPlan && (
             <div
               style={{
                 background: "#0f172a",
-                borderRadius: "6px",
-                padding: "0.4rem 0.6rem",
+                borderRadius: "8px",
+                padding: "0.5rem 0.75rem",
                 fontSize: "0.8rem",
                 color: "#cbd5e1",
+                borderLeft: `3px solid ${recColor}`,
               }}
             >
               {todayPlan}
             </div>
           )}
-        </Widget>
+        </div>
+
+        {/* Quick streaks bar */}
+        <div
+          style={{
+            display: "flex",
+            gap: "1.5rem",
+            padding: "0.6rem 1rem",
+            background: "#1e293b",
+            borderRadius: "10px",
+            marginBottom: "0.75rem",
+            fontSize: "0.8rem",
+            color: "#94a3b8",
+            border: "1px solid #334155",
+          }}
+        >
+          <span>
+            Green streak{" "}
+            <strong style={{ color: "#4ade80" }}>
+              {streaks.green_recovery}d
+            </strong>
+          </span>
+          <span>
+            No-skip{" "}
+            <strong style={{ color: "#4ade80" }}>{streaks.no_skip}d</strong>
+          </span>
+          <span>
+            Best{" "}
+            <strong style={{ color: "#94a3b8" }}>
+              {streaks.best_green_recovery}d
+            </strong>
+          </span>
+        </div>
 
         {/* Detail sections — shown only with ?detail=1 */}
         {showDetail && (
           <>
-            {/* HRV Chart */}
+            {/* 90-day recovery heatmap */}
+            <Widget title={`Recovery heatmap — 90 days`}>
+              <RecoveryHeatmap scores={heatmapScores} />
+            </Widget>
+
+            {/* HRV sparkline */}
             <Widget title={`HRV — last ${snaps30.length} days`}>
-              <HrvChart values={hrvValues} />
+              <Sparkline values={hrvValues} color="#4ade80" />
               <div
                 style={{
                   display: "flex",
@@ -433,6 +722,7 @@ export default async function Page({ searchParams }: Props) {
                   marginTop: "0.4rem",
                   fontSize: "0.8rem",
                   color: "#94a3b8",
+                  flexWrap: "wrap",
                 }}
               >
                 <span>
@@ -446,65 +736,247 @@ export default async function Page({ searchParams }: Props) {
               </div>
             </Widget>
 
-            {/* Recovery Bars */}
-            <Widget title={`Recovery — last ${snaps30.length} days`}>
-              <RecoveryBars scores={recScores} />
+            {/* RHR sparkline */}
+            {rhrValues.length >= 2 && (
+              <Widget title={`RHR — last ${snaps30.length} days`}>
+                <Sparkline values={rhrValues} color="#f87171" />
+                <div
+                  style={{
+                    fontSize: "0.8rem",
+                    color: "#94a3b8",
+                    marginTop: "0.4rem",
+                  }}
+                >
+                  Avg{" "}
+                  {(
+                    rhrValues.reduce((a, b) => a + b, 0) / rhrValues.length
+                  ).toFixed(1)}
+                  bpm
+                </div>
+              </Widget>
+            )}
+
+            {/* Sleep efficiency sparkline */}
+            {sleepValues.length >= 2 && (
+              <Widget title={`Sleep efficiency — last ${snaps30.length} days`}>
+                <Sparkline values={sleepValues} color="#818cf8" />
+                <div
+                  style={{
+                    fontSize: "0.8rem",
+                    color: "#94a3b8",
+                    marginTop: "0.4rem",
+                  }}
+                >
+                  Avg{" "}
+                  {(
+                    sleepValues.reduce((a, b) => a + b, 0) / sleepValues.length
+                  ).toFixed(1)}
+                  %
+                </div>
+              </Widget>
+            )}
+
+            {/* Week-over-week comparison */}
+            <Widget title="WEEK OVER WEEK">
               <div
                 style={{
-                  display: "flex",
-                  gap: "0.75rem",
-                  marginTop: "0.4rem",
-                  fontSize: "0.75rem",
-                  color: "#64748b",
+                  display: "grid",
+                  gridTemplateColumns: "1fr auto auto",
+                  gap: "0.15rem 0.75rem",
+                  fontSize: "0.8rem",
                 }}
               >
-                <span style={{ color: "#4ade80" }}>■</span>
-                <span>≥67%</span>
-                <span style={{ color: "#facc15" }}>■</span>
-                <span>34–66%</span>
-                <span style={{ color: "#ef4444" }}>■</span>
-                <span>&lt;34%</span>
+                <span style={{ color: "#475569", fontSize: "0.7rem" }}>
+                  Metric
+                </span>
+                <span style={{ color: "#475569", fontSize: "0.7rem" }}>
+                  This wk
+                </span>
+                <span style={{ color: "#475569", fontSize: "0.7rem" }}>
+                  Last wk
+                </span>
+
+                <span style={{ color: "#94a3b8" }}>HRV</span>
+                <span style={{ fontWeight: 600 }}>
+                  {wow.hrv_this != null ? `${wow.hrv_this.toFixed(1)}ms` : "—"}
+                </span>
+                <span style={{ color: "#64748b" }}>
+                  {wow.hrv_prev != null ? `${wow.hrv_prev.toFixed(1)}ms` : "—"}
+                  {wow.hrv_this != null && wow.hrv_prev != null
+                    ? (() => {
+                        const d = wow.hrv_this - wow.hrv_prev;
+                        const good = d > 0;
+                        const col =
+                          d > 0 ? "#4ade80" : d < 0 ? "#f87171" : "#94a3b8";
+                        return (
+                          <span style={{ color: col, marginLeft: "0.25rem" }}>
+                            {d > 0 ? "↑" : d < 0 ? "↓" : "→"}
+                          </span>
+                        );
+                      })()
+                    : null}
+                </span>
+
+                <span style={{ color: "#94a3b8" }}>RHR</span>
+                <span style={{ fontWeight: 600 }}>
+                  {wow.rhr_this != null ? `${wow.rhr_this.toFixed(1)}bpm` : "—"}
+                </span>
+                <span style={{ color: "#64748b" }}>
+                  {wow.rhr_prev != null ? `${wow.rhr_prev.toFixed(1)}bpm` : "—"}
+                  {wow.rhr_this != null && wow.rhr_prev != null
+                    ? (() => {
+                        const d = wow.rhr_this - wow.rhr_prev;
+                        const col =
+                          d < 0 ? "#4ade80" : d > 0 ? "#f87171" : "#94a3b8";
+                        return (
+                          <span style={{ color: col, marginLeft: "0.25rem" }}>
+                            {d < 0 ? "↑" : d > 0 ? "↓" : "→"}
+                          </span>
+                        );
+                      })()
+                    : null}
+                </span>
+
+                <span style={{ color: "#94a3b8" }}>Sleep</span>
+                <span style={{ fontWeight: 600 }}>
+                  {wow.sleep_this != null
+                    ? `${wow.sleep_this.toFixed(1)}%`
+                    : "—"}
+                </span>
+                <span style={{ color: "#64748b" }}>
+                  {wow.sleep_prev != null
+                    ? `${wow.sleep_prev.toFixed(1)}%`
+                    : "—"}
+                  {wow.sleep_this != null && wow.sleep_prev != null
+                    ? (() => {
+                        const d = wow.sleep_this - wow.sleep_prev;
+                        const col =
+                          d > 0 ? "#4ade80" : d < 0 ? "#f87171" : "#94a3b8";
+                        return (
+                          <span style={{ color: col, marginLeft: "0.25rem" }}>
+                            {d > 0 ? "↑" : d < 0 ? "↓" : "→"}
+                          </span>
+                        );
+                      })()
+                    : null}
+                </span>
+
+                <span style={{ color: "#94a3b8" }}>Strain</span>
+                <span style={{ fontWeight: 600 }}>
+                  {wow.strain_this != null ? wow.strain_this.toFixed(1) : "—"}
+                </span>
+                <span style={{ color: "#64748b" }}>
+                  {wow.strain_prev != null ? wow.strain_prev.toFixed(1) : "—"}
+                </span>
               </div>
             </Widget>
 
-            {/* Streaks + Body */}
-            <div className="two-col">
-              <Widget title="STREAKS">
-                <StatRow
-                  label="Green recovery"
-                  value={`🔥 ${streaks.green_recovery}d`}
-                />
-                <StatRow
-                  label="Best"
-                  value={`${streaks.best_green_recovery}d`}
-                />
-                <StatRow label="No-skip days" value={`✓ ${streaks.no_skip}d`} />
-              </Widget>
-              <Widget title="BODY">
-                <StatRow
-                  label="Weight"
-                  value={latestWeight != null ? `${latestWeight}kg` : "—"}
-                />
-                <StatRow
-                  label="Waist"
-                  value={latestWaist != null ? `${latestWaist}cm` : "—"}
-                />
-                {weightHistory.length >= 2 && (
-                  <StatRow
-                    label="Δ weight"
-                    value={(() => {
-                      const delta =
-                        weightHistory[weightHistory.length - 1].value -
-                        weightHistory[0].value;
-                      return (delta >= 0 ? "+" : "") + delta.toFixed(1) + "kg";
-                    })()}
-                  />
+            {/* Goals progress */}
+            {goals && (
+              <Widget title="GOALS">
+                {(["hrv", "rhr", "weight", "waist"] as const).map((field) => {
+                  const goalVal = goals[field];
+                  if (goalVal == null) return null;
+                  const currentVal =
+                    field === "hrv"
+                      ? latestHrv
+                      : field === "rhr"
+                        ? latestRhr
+                        : field === "weight"
+                          ? latestWeight
+                          : latestWaist;
+                  if (currentVal == null) return null;
+
+                  // For RHR and weight/waist, lower is better — invert progress
+                  const higherIsBetter = field === "hrv";
+                  const progress = higherIsBetter
+                    ? currentVal / goalVal
+                    : goalVal / currentVal;
+                  const bar = progressBar(Math.round(progress * 5), 5, 5);
+                  const unit =
+                    field === "hrv"
+                      ? "ms"
+                      : field === "rhr"
+                        ? "bpm"
+                        : field === "weight"
+                          ? "kg"
+                          : "cm";
+
+                  return (
+                    <div
+                      key={field}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "0.2rem 0",
+                        fontSize: "0.85rem",
+                      }}
+                    >
+                      <span
+                        style={{
+                          color: "#94a3b8",
+                          textTransform: "uppercase",
+                          fontSize: "0.75rem",
+                        }}
+                      >
+                        {field}
+                      </span>
+                      <span
+                        style={{
+                          color: "#4ade80",
+                          fontFamily: "monospace",
+                          letterSpacing: "0.05em",
+                        }}
+                      >
+                        {bar}
+                      </span>
+                      <span style={{ color: "#64748b", fontSize: "0.75rem" }}>
+                        {currentVal.toFixed(field === "hrv" ? 0 : 1)}
+                        {unit} → {goalVal}
+                        {unit}
+                      </span>
+                    </div>
+                  );
+                })}
+                {proteinRate != null && (
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "0.2rem 0",
+                      fontSize: "0.85rem",
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: "#94a3b8",
+                        textTransform: "uppercase",
+                        fontSize: "0.75rem",
+                      }}
+                    >
+                      Protein 7d
+                    </span>
+                    <span
+                      style={{
+                        color: "#4ade80",
+                        fontFamily: "monospace",
+                        letterSpacing: "0.05em",
+                      }}
+                    >
+                      {progressBar(proteinHits, proteinHistory.length, 7)}
+                    </span>
+                    <span style={{ color: "#64748b", fontSize: "0.75rem" }}>
+                      {proteinHits}/{proteinHistory.length} days
+                    </span>
+                  </div>
                 )}
               </Widget>
-            </div>
+            )}
 
             {/* Training load */}
-            <Widget title="TRAINING LOAD (ACWR)">
+            <Widget title="TRAINING LOAD">
               <StatRow
                 label="Acute 7d avg"
                 value={
@@ -524,16 +996,48 @@ export default async function Page({ searchParams }: Props) {
               {trends.acwr != null && (
                 <StatRow
                   label="ACWR"
-                  value={`${trends.acwr.toFixed(2)} — ${acwrNote}`}
+                  value={`${trends.acwr.toFixed(2)}`}
+                  delta={acwrNote}
                 />
               )}
               {pa.compliance !== "unknown" && (
                 <StatRow
                   label="Polarized ratio"
-                  value={`${paRatio} (${pa.compliance})`}
+                  value={`${paRatio}`}
+                  delta={pa.compliance}
                 />
               )}
             </Widget>
+
+            {/* Streaks + Body */}
+            <div className="two-col">
+              <Widget title="STREAKS">
+                <StatRow
+                  label="Green recovery"
+                  value={`🔥 ${streaks.green_recovery}d`}
+                />
+                <StatRow
+                  label="Best"
+                  value={`${streaks.best_green_recovery}d`}
+                />
+                <StatRow label="No-skip" value={`✓ ${streaks.no_skip}d`} />
+              </Widget>
+              <Widget title="BODY">
+                <StatRow label="Weight" value={latestWeightStr} />
+                <StatRow label="Waist" value={latestWaistStr} />
+                {weightHistory.length >= 2 && (
+                  <StatRow
+                    label="Δ weight"
+                    value={(() => {
+                      const delta =
+                        weightHistory[weightHistory.length - 1].value -
+                        weightHistory[0].value;
+                      return (delta >= 0 ? "+" : "") + delta.toFixed(1) + "kg";
+                    })()}
+                  />
+                )}
+              </Widget>
+            </div>
 
             {/* Recent workouts */}
             {recentWorkouts.length > 0 && (
@@ -544,17 +1048,32 @@ export default async function Page({ searchParams }: Props) {
                     <div
                       key={s.date}
                       style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        padding: "0.2rem 0",
-                        borderBottom: "1px solid #1e293b",
+                        display: "grid",
+                        gridTemplateColumns: "5rem 1fr auto",
+                        gap: "0.5rem",
+                        alignItems: "center",
+                        padding: "0.3rem 0",
+                        borderBottom: "1px solid #0f172a",
                         fontSize: "0.8rem",
                       }}
                     >
-                      <span style={{ color: "#94a3b8" }}>{s.date}</span>
-                      <span>{w.sport}</span>
-                      <span style={{ color: "#64748b" }}>
-                        strain {w.strain.toFixed(1)}
+                      <span
+                        style={{
+                          color: "#475569",
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      >
+                        {s.date.slice(5)}
+                      </span>
+                      <span style={{ color: "#cbd5e1" }}>{w.sport}</span>
+                      <span
+                        style={{
+                          color: "#64748b",
+                          textAlign: "right",
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      >
+                        {w.strain.toFixed(1)}
                       </span>
                     </div>
                   );
