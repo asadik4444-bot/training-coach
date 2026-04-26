@@ -82,6 +82,23 @@ export async function setBiometricSnapshot(
   );
 }
 
+/**
+ * Write multiple snapshots in a single Redis connection (avoids 90× connect/quit
+ * overhead during backfill). Each key gets a 90-day TTL.
+ */
+export async function setBiometricSnapshotsBatch(
+  entries: Array<{ date: string; snapshot: object }>,
+): Promise<void> {
+  if (entries.length === 0) return;
+  await withClient(async (c) => {
+    for (const { date, snapshot } of entries) {
+      await c.set(`biometrics:${date}`, JSON.stringify(snapshot), {
+        EX: NINETY_DAYS_SECONDS,
+      });
+    }
+  });
+}
+
 export async function getBiometricSnapshot(
   date: string,
 ): Promise<unknown | null> {
