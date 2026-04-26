@@ -12,6 +12,17 @@ import {
   saveDoneEntry,
   setGoal,
   listAllGoals,
+  setProtein,
+  getProtein,
+  listProtein,
+  setBedtime,
+  listBedtimes,
+  addPainEntry,
+  getPainEntries,
+  listPainEntries,
+  appendToArchive,
+  getArchiveMonth,
+  listArchiveMonths,
   type GoalField,
 } from "@/lib/kv";
 import { toMetrics, summarize, polarizedAnalysis } from "@/lib/analytics";
@@ -73,8 +84,11 @@ export async function handleHelp(): Promise<string> {
     "/done rpe 8 rir 2 soreness 5 [notes] — log session effort",
     "/goal <field> <value> — set a goal (weight/waist/hrv/rhr)",
     "/goals — show all goals + current progress",
-    "/streak — green-recovery + no-skip streaks",
     "/calendar — 90-day recovery heatmap",
+    "/protein [y|n] — log protein hit/miss or show 7-day rate",
+    "/bedtime [HH:MM] — log bedtime or show 7-day avg",
+    "/pain [area severity note] — log pain or show 7-day log",
+    "/export — get archive export URL",
     "/backfill — pull 90 days of history from Whoop",
     "/setup — backfill + onboarding guide",
     "/log <text> — append training note",
@@ -138,6 +152,14 @@ export async function handleToday(todayISO: string): Promise<string> {
     }
   } catch {
     // plan read is non-critical
+  }
+
+  // Protein hit rate (last 7 days)
+  const proteinHistory = await listProtein(7);
+  if (proteinHistory.length > 0) {
+    const hits = proteinHistory.filter((e) => e.hit).length;
+    const rate = Math.round((hits / proteinHistory.length) * 100);
+    lines.push(`Protein: ${hits}/${proteinHistory.length} days (${rate}%)`);
   }
 
   return lines.join("\n");
@@ -871,4 +893,134 @@ export async function handleGoals(todayISO: string): Promise<string> {
   }
 
   return lines.join("\n");
+}
+
+// ── /protein ──────────────────────────────────────────────────────────────────
+
+export async function handleProtein(
+  arg: string,
+  todayISO: string,
+): Promise<string> {
+  const trimmed = arg.trim().toLowerCase();
+  if (trimmed === "y" || trimmed === "yes") {
+    await setProtein(todayISO, true);
+    return "Logged protein hit ✓";
+  }
+  if (trimmed === "n" || trimmed === "no") {
+    await setProtein(todayISO, false);
+    return "Logged protein miss.";
+  }
+  // No arg → show last 7 days hit rate
+  const history = await listProtein(7);
+  if (history.length === 0)
+    return "No protein data yet. Use /protein y or /protein n.";
+  const hits = history.filter((e) => e.hit).length;
+  const rate = Math.round((hits / history.length) * 100);
+  const sparks = history.map((e) => (e.hit ? "✅" : "❌")).join(" ");
+  return [
+    `🥩 Protein — last ${history.length} days`,
+    sparks,
+    `Hit rate: ${hits}/${history.length} (${rate}%)`,
+  ].join("\n");
+}
+
+// ── /bedtime ──────────────────────────────────────────────────────────────────
+
+/** Parse "HH:MM" → minutes since midnight, or null if invalid */
+function parseBedtimeMinutes(time: string): number | null {
+  const m = time.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
+
+export async function handleBedtime(
+  arg: string,
+  todayISO: string,
+): Promise<string> {
+  const trimmed = arg.trim();
+  if (trimmed) {
+    // Any non-empty arg: must be valid HH:MM
+    if (parseBedtimeMinutes(trimmed) === null) {
+      return "Usage: /bedtime HH:MM  (e.g. /bedtime 23:15)";
+    }
+    await setBedtime(todayISO, trimmed);
+    return `Bedtime logged: ${trimmed} ✓`;
+  }
+  // No arg → show last 7 days
+  const history = await listBedtimes(7);
+  if (history.length === 0) return "No bedtime data yet. Use /bedtime HH:MM.";
+  const minutes = history
+    .map((e) => parseBedtimeMinutes(e.time))
+    .filter((m): m is number => m !== null);
+  const avg = minutes.reduce((a, b) => a + b, 0) / minutes.length;
+  const avgH = Math.floor(avg / 60);
+  const avgM = Math.round(avg % 60);
+  const variance =
+    minutes.length > 1
+      ? Math.sqrt(
+          minutes.reduce((a, b) => a + (b - avg) ** 2, 0) / minutes.length,
+        )
+      : 0;
+  const lines = [`🌙 Bedtime — last ${history.length} days`];
+  for (const e of history) lines.push(`  ${e.date}: ${e.time}`);
+  lines.push(
+    `Avg: ${avgH.toString().padStart(2, "0")}:${avgM.toString().padStart(2, "0")}  σ ${variance.toFixed(0)}min`,
+  );
+  return lines.join("\n");
+}
+
+// ── /pain ─────────────────────────────────────────────────────────────────────
+
+export async function handlePain(
+  text: string,
+  todayISO: string,
+): Promise<string> {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    // Show last 7 days pain log
+    const history = await listPainEntries(7);
+    if (history.length === 0)
+      return "No pain entries in last 7 days. Use /pain <area> <severity 1-10> [note].";
+    const lines = ["🩺 Pain log — last 7 days"];
+    for (const day of history) {
+      for (const e of day.entries) {
+        lines.push(
+          `  ${day.date} ${e.area} ${e.severity}/10${e.note ? ` — ${e.note}` : ""}`,
+        );
+      }
+    }
+    return lines.join("\n");
+  }
+
+  // Parse: <area> <severity> [note...]
+  const parts = trimmed.split(/\s+/);
+  if (parts.length < 2) return "Usage: /pain knee 5 sharp";
+  const area = parts[0];
+  const severity = parseInt(parts[1], 10);
+  if (isNaN(severity) || severity < 1 || severity > 10) {
+    return "Severity must be 1–10. Usage: /pain knee 5 sharp";
+  }
+  const note = parts.slice(2).join(" ");
+  await addPainEntry(todayISO, { area, severity, note });
+  return `Pain logged: ${area} ${severity}/10${note ? ` — ${note}` : ""}.`;
+}
+
+// ── /export ───────────────────────────────────────────────────────────────────
+
+export async function handleExport(): Promise<string> {
+  const months = await listArchiveMonths();
+  if (months.length === 0)
+    return "No archive data yet. Archive builds automatically from daily cron runs.";
+  const baseUrl = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "https://training-coach-phi.vercel.app";
+  const secret = process.env.DASHBOARD_SECRET ?? "";
+  const url = `${baseUrl}/api/export?key=${secret}`;
+  return [
+    `📦 Archive: ${months.length} month(s) stored (${months.join(", ")})`,
+    `Export: ${url}`,
+  ].join("\n");
 }

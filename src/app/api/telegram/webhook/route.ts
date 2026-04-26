@@ -22,8 +22,16 @@ import {
   handleDone,
   handleGoal,
   handleGoals,
+  handleProtein,
+  handleBedtime,
+  handlePain,
+  handleExport,
 } from "@/lib/commands";
-import { sendTelegram } from "@/lib/telegram";
+import {
+  sendTelegram,
+  sendTelegramWithButtons,
+  answerCallback,
+} from "@/lib/telegram";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +42,12 @@ interface TelegramUpdate {
     chat: { id: number };
     text?: string;
     date: number;
+  };
+  callback_query?: {
+    id: string;
+    from: { id: number; first_name: string };
+    message: { chat: { id: number } };
+    data: string;
   };
 }
 
@@ -46,6 +60,85 @@ function parsePosInt(raw: string | undefined, def: number): number {
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const update = (await req.json()) as TelegramUpdate;
 
+  const todayDate = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Europe/Zurich" }),
+  );
+  const todayISO = todayDate.toISOString().slice(0, 10);
+
+  // ── Handle callback_query (inline button taps) ────────────────────────────
+  if (update.callback_query) {
+    const cb = update.callback_query;
+    // Single-user guard using chat id from the callback message
+    if (String(cb.message.chat.id) !== process.env.TELEGRAM_CHAT_ID) {
+      return NextResponse.json({ ok: true });
+    }
+
+    const data = cb.data;
+
+    if (data === "confirm") {
+      await answerCallback(cb.id, "Confirmed.");
+      await sendTelegram("Plan confirmed for today. ✓");
+    } else if (data === "skip") {
+      await handleSkip(todayISO);
+      await answerCallback(cb.id, "Skipped.");
+      await sendTelegram(
+        "Today marked as skipped. Recovery-aware progression resumes tomorrow.",
+      );
+    } else if (data.startsWith("swap:")) {
+      const target = data.slice(5);
+      const result = await handleSwap(target, todayISO);
+      await answerCallback(cb.id, "Swapped.");
+      await sendTelegram(result);
+    } else if (data === "done") {
+      await handleDone("rpe 7", todayISO);
+      await answerCallback(cb.id, "Logged.");
+      // Send RPE picker
+      await sendTelegramWithButtons("Session logged. Set RPE:", [
+        [
+          { text: "RPE 1-3", callback_data: "rpe:2" },
+          { text: "RPE 4-5", callback_data: "rpe:5" },
+          { text: "RPE 6-7", callback_data: "rpe:7" },
+        ],
+        [
+          { text: "RPE 8-9", callback_data: "rpe:8" },
+          { text: "RPE 10", callback_data: "rpe:10" },
+        ],
+      ]);
+    } else if (data.startsWith("rpe:")) {
+      const rpe = parseInt(data.slice(4), 10);
+      if (Number.isFinite(rpe)) {
+        await handleDone(`rpe ${rpe}`, todayISO);
+        await answerCallback(cb.id, `Logged RPE ${rpe}.`);
+        await sendTelegram(`RPE ${rpe} logged. ✓`);
+      } else {
+        await answerCallback(cb.id, "Invalid RPE.");
+      }
+    } else if (data === "session_done") {
+      await handleDone("rpe 7", todayISO);
+      await answerCallback(cb.id, "Done logged.");
+      await sendTelegram(
+        "Session logged as done. Use /done rpe N to update RPE.",
+      );
+    } else if (data === "session_skip") {
+      await handleSkip(todayISO);
+      await answerCallback(cb.id, "Skipped.");
+      await sendTelegram("Session skipped. Rest up.");
+    } else if (data === "session_modified") {
+      await answerCallback(cb.id, "Modified — log details.");
+      await sendTelegram("Use /done rpe N to log what you did.");
+    } else if (data === "session_couldnt") {
+      await handleSkip(todayISO);
+      await answerCallback(cb.id, "Logged.");
+      await sendTelegram(
+        "Session missed. No sweat — keep the streak alive tomorrow.",
+      );
+    } else {
+      await answerCallback(cb.id, "Unknown action.");
+    }
+
+    return NextResponse.json({ ok: true });
+  }
+
   const message = update.message;
 
   // Ignore updates without a message or text — always 200 so Telegram doesn't retry
@@ -57,11 +150,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (String(message.chat.id) !== process.env.TELEGRAM_CHAT_ID) {
     return NextResponse.json({ ok: true });
   }
-
-  const todayDate = new Date(
-    new Date().toLocaleString("en-US", { timeZone: "Europe/Zurich" }),
-  );
-  const todayISO = todayDate.toISOString().slice(0, 10);
 
   const text = message.text.trim();
   // Strip bot username suffix (e.g. /cmd@whoop_trainer_bot → /cmd)
@@ -127,6 +215,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     reply = await handleGoal("", "", todayISO);
   } else if (cmd === "/goals") {
     reply = await handleGoals(todayISO);
+  } else if (cmd === "/protein") {
+    reply = await handleProtein(arg1 ?? "", todayISO);
+  } else if (cmd === "/bedtime") {
+    reply = await handleBedtime(arg1 ?? "", todayISO);
+  } else if (cmd === "/pain") {
+    reply = await handlePain(
+      parts.length > 1 ? normalized.slice("/pain ".length) : "",
+      todayISO,
+    );
+  } else if (cmd === "/export") {
+    reply = await handleExport();
   } else {
     reply = await handleHelp();
   }
