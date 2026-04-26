@@ -1,6 +1,8 @@
 // Run once after deploy:
 // node --env-file=.env.local --experimental-strip-types scripts/set-telegram-webhook.ts
 
+export {};
+
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token) {
   console.error("Error: TELEGRAM_BOT_TOKEN is not set");
@@ -15,7 +17,7 @@ const res = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
   body: JSON.stringify({ url: webhookUrl }),
 });
 
-const body = await res.json();
+const body = (await res.json()) as { ok: boolean; description?: string };
 
 if (res.ok && body.ok) {
   console.log("Webhook set successfully:", body.description ?? "OK");

@@ -15,7 +15,7 @@ interface TelegramUpdate {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const update: TelegramUpdate = await req.json();
+  const update = (await req.json()) as TelegramUpdate;
 
   const message = update.message;
 
