@@ -800,15 +800,24 @@ export async function handleGoal(
 export async function handleGoals(todayISO: string): Promise<string> {
   const goals = await listAllGoals();
 
-  // Fetch today's snapshot for current values
+  // Fetch today's snapshot for HRV/RHR current values
   const snap = (await getBiometricSnapshot(todayISO)) as
     | import("@/lib/whoop").BiometricSnapshot
     | null;
 
-  const currentWeight = (() => {
-    // Try to get most recent weight from body measurements (last 30 days)
-    return null; // weight not available from biometric snapshot directly
-  })();
+  // Fetch most recent body measurements (last 30 days, take last entry)
+  const [weightHistory, waistHistory] = await Promise.all([
+    listBodyMeasurements("weight", 30),
+    listBodyMeasurements("waist", 30),
+  ]);
+  const currentWeight =
+    weightHistory.length > 0
+      ? weightHistory[weightHistory.length - 1].value
+      : null;
+  const currentWaist =
+    waistHistory.length > 0
+      ? waistHistory[waistHistory.length - 1].value
+      : null;
 
   const currentHrv = snap?.recovery?.hrv_rmssd_ms ?? null;
   const currentRhr = snap?.recovery?.rhr_bpm ?? null;
@@ -834,7 +843,8 @@ export async function handleGoals(todayISO: string): Promise<string> {
     let current: number | null = null;
     if (f === "hrv") current = currentHrv;
     else if (f === "rhr") current = currentRhr;
-    // weight and waist: no real-time value from snap; show no current data
+    else if (f === "weight") current = currentWeight;
+    else if (f === "waist") current = currentWaist;
 
     if (current == null) {
       lines.push(

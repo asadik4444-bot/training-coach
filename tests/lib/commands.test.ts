@@ -630,4 +630,41 @@ describe("handleGoals", () => {
     expect(reply).toContain("75kg");
     expect(reply).toContain("no current data");
   });
+
+  it("shows weight delta when listBodyMeasurements returns a recent entry", async () => {
+    vi.mocked(listAllGoals).mockResolvedValue({
+      weight: 75,
+      waist: null,
+      hrv: null,
+      rhr: null,
+    });
+    vi.mocked(listBodyMeasurements).mockImplementation(
+      async (field: string) => {
+        if (field === "weight") return [{ date: TODAY, value: 79.4 }];
+        return [];
+      },
+    );
+    const reply = await handleGoals(TODAY);
+    expect(reply).toContain("79.4");
+    // goal 75 - current 79.4 = -4.4 → direction shows "4.4 to go"
+    expect(reply).toMatch(/-4\.4|4\.4/);
+  });
+
+  it("shows waist delta when listBodyMeasurements returns a recent entry", async () => {
+    vi.mocked(listAllGoals).mockResolvedValue({
+      weight: null,
+      waist: 80,
+      hrv: null,
+      rhr: null,
+    });
+    vi.mocked(listBodyMeasurements).mockImplementation(
+      async (field: string) => {
+        if (field === "waist") return [{ date: TODAY, value: 85 }];
+        return [];
+      },
+    );
+    const reply = await handleGoals(TODAY);
+    expect(reply).toContain("85");
+    expect(reply).toContain("80cm");
+  });
 });
