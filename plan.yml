@@ -1,0 +1,20 @@
+week_start: 2026-04-27
+days:
+  monday:
+    type: lift
+    focus: chest
+    summary: "Bench 4x8 / Incline DB 3x10 / Cable fly 3x12"
+  tuesday:
+    type: run
+    summary: "45 min Z2 outdoor run, cap 145 bpm"
+  wednesday:
+    type: lift
+    focus: legs
+    summary: "Squat 4x6 / RDL 3x8 / Walking lunge 3x10"
+  thursday:
+    type: run
+    summary: "30 min run with 5x3min Z3 intervals"
+  friday:
+    type: lift
+    focus: pull
+    summary: "Deadlift 3x5 / Pull-up 3xAMRAP / Row 3x10"
