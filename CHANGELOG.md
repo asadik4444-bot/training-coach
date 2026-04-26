@@ -1,5 +1,18 @@
 # Changelog
 
+## v8 (2026-04-26)
+
+- `feat(perf)` — singleton Redis client with lazy connect + `Promise.all` batching in kv.ts; eliminates per-request reconnect overhead
+- `fix(auth)` — HMAC session token includes 30-day expiry timestamp; middleware auto-renews tokens within 7 days of expiry
+- `feat(pwa)` — `manifest.json` + `apple-touch-icon.png`; dashboard installable via iPhone Safari → Share → Add to Home Screen
+- `feat(design)` — CSS custom property tokens (OLED palette: `--bg:#000`, `--primary:#1E40AF`, `--accent:#D97706`) + Fira Sans / Fira Code loaded in layout
+- `feat(today-sticky)` — `StickyToday` client component: full hero card on load, collapses to compact recovery strip on scroll
+- `feat(heatmap)` — `Heatmap` component: 13-week (91-day) tappable recovery grid; tap a cell opens `DayDetailSheet` bottom sheet with HRV/RHR/sleep/workout breakdown
+- `feat(chart-pill)` — `TrendChart` client component: segmented 7d/30d/90d/365d pill control; 7d/30d/90d sliced from server-prefetched 91-day data (zero extra fetches); 365d fetched lazily + weekly-aggregated; period persisted in localStorage per metric; replaces static sparklines for HRV, RHR, Sleep, Strain
+- `feat(bedtime)` — bedtime consistency widget: 30-day average bedtime (HH:MM), std-dev in minutes color-coded green/yellow/red, 14-night sparkline
+- `feat(pull-refresh)` — `PullToRefresh` client island: touch gesture with spinning indicator; dy > 80px triggers reload; "Updated HH:MM" server-rendered timestamp in header
+- `feat(polish)` — WoW table: ▲/▼ percentage delta with green/red color per metric direction; removed dead `Sparkline` component, `wowDelta` helper, unused value arrays
+
 ## v7 (2026-04-26)
 
 - `voice.ts` — personality-driven coach messages: `opener(band)` rotates by UTC date per recovery band, `streakCue(n)`, `adherenceCue(skips)`, `deloadCelebrate()`
