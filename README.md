@@ -175,3 +175,52 @@ Every Sunday after the weekly summary arrives, run a session to:
 3. Commit updated `plan.yml` and redeploy.
 
 See `docs/sunday-ritual.md` for the full prompt template.
+
+---
+
+## Build log — v0 through v7 (one session, 2026-04-26)
+
+| Version | Tag  | Headline                                                                                                                                                                                                                            | Tests | Commits                                                                          |
+| ------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | -------------------------------------------------------------------------------- | --- | --- |
+| v0      | `v0` | Daily Whoop cron → Telegram readiness ping (recovery + plan from `plan.yml`)                                                                                                                                                        | 10    | 9                                                                                |
+| v1      | —    | `/log` `/skip` `/swap` Telegram commands + Redis persistence                                                                                                                                                                        | 21    | 6                                                                                |
+| v2      | `v2` | Sunday weekly summary cron + initial Sunday ritual docs                                                                                                                                                                             | 23    | 6                                                                                |
+| v3      | `v3` | Full Whoop biometric snapshot (HRV/RHR/sleep/strain/zones) + science-grounded `decideToday` engine + ACWR + HRV-trend override                                                                                                      | 51    | 9                                                                                |
+| v4      | `v4` | 14 analytics commands (`/hrv` `/rhr` `/sleep` `/zones` `/load` `/report week                                                                                                                                                        | month | year` `/recent`) + 90-day backfill + sparklines + polarized 80/20 + monthly cron | 89  | 9   |
+| v5      | `v5` | Visual web dashboard at `/` (mobile-first, signed cookie auth) + `/weight` `/waist` `/body` `/streak` `/calendar`                                                                                                                   | 106   | 7                                                                                |
+| v6      | `v6` | `/done` (RPE/RIR/soreness) + `/goal` `/goals` + period-comparison reports + auto-deload alerts + signed cookie session                                                                                                              | 132   | 7                                                                                |
+| v7      | `v7` | Coach voice (personality openers) + Telegram inline keyboards + `/protein` `/bedtime` `/pain` (with pre-session pain gate) + durable Redis archive (no TTL) + `/export` + adaptive `/today` + redesigned dashboard with `?detail=1` | 168   | 10                                                                               |
+
+**Total:** 78 commits, 168 tests, 4 cron jobs (daily / post-workout / weekly / monthly), 11 API routes, 25 Telegram commands, $0/month operating cost.
+
+### Key sources (science-grounded)
+
+- WHOOP OAuth API v2 (recovery, sleep, cycle, workout)
+- Gabbett 2016 — Acute:Chronic Workload Ratio (sweet spot 0.8–1.3)
+- Seiler — polarized 80/20 endurance training
+- Helms / Zourdos — RPE/RIR scale calibration
+- Coffey & Hawley — concurrent training interference (hypertrophy + endurance)
+- Burke et al. 2011 — binary self-monitoring beats quantitative tracking 4× on adherence
+- Marco Altini / HRV4Training — RMSSD trend > composite recovery score
+
+### Stack
+
+- Next.js 15 + TypeScript on Vercel Hobby (free tier)
+- Vercel marketplace Redis (TCP, KV-prefixed env vars)
+- Whoop Developer API v2 (read-only OAuth)
+- Telegram Bot API (`@whoop_trainer_bot`)
+- Vitest for unit tests
+- No paid LLM API; coaching intelligence concentrated in weekly Sunday Claude Code ritual
+
+### Architecture decision log
+
+1. Path B chosen over A/C/D: hybrid (Whoop Coach + thin custom shim). Avoided commercial app lock-in (Hevy, MacroFactor, JuggernautAI).
+2. Vercel marketplace Redis (TCP) over `@vercel/kv` (REST) — `node-redis` client; `redis://default:...@redis-...redislabs.com`.
+3. Plan.yml lives in repo (committed), edited weekly via Sunday Claude Code ritual. No daily LLM API call.
+4. Public repo enabled CLI deploys on Hobby (private repos blocked by Vercel Hobby tier).
+5. Single user gated by `TELEGRAM_CHAT_ID` check + per-route bearer secrets.
+6. Dashboard auth: signed HMAC-SHA256 cookie set after first `?key=...` visit, 30-day expiry.
+7. 90-day Redis TTL on biometric snapshots; durable archive in Redis with no TTL added in v7.
+8. Whoop API requires ISO timestamps for `start`/`end` (not just dates) — caught and fixed in v4.
+9. Auto-deload triggers when ≥2 chronic stress signals fire simultaneously (HRV decline, RHR drift, ACWR>1.4, sleep debt).
+10. Body recomp tracked manually via `/weight` + `/waist` + tape measure; no scale required.
