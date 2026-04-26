@@ -70,6 +70,8 @@ struct TodayView: View {
 }
 
 private struct TodaySuccessView: View {
+    @State private var isRecapPresented = false
+
     let data: TodayData
 
     var body: some View {
@@ -79,7 +81,43 @@ private struct TodaySuccessView: View {
             LastWorkoutCard(workout: data.day.biometrics?.lastWorkout)
             DecisionCard(decision: data.decision)
             PainProteinBedtimeRow(day: data.day)
+            shareRecapButton
         }
+        .sheet(isPresented: $isRecapPresented) {
+            RecapView()
+        }
+    }
+
+    private var shareRecapButton: some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            isRecapPresented = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color.primaryLight)
+                    .frame(width: 34, height: 34)
+                    .background(Color.primaryLight.opacity(0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .accessibilityHidden(true)
+
+                Text("Share Recap")
+                    .font(.firaSans(15, weight: .medium))
+                    .foregroundStyle(Color.text)
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.textDim)
+                    .accessibilityHidden(true)
+            }
+            .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+            .padding(14)
+            .todayCardStyle()
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens the shareable recap card generator.")
     }
 }
 

@@ -6,6 +6,7 @@ struct TrainingCoachWidgetBundle: WidgetBundle {
     var body: some Widget {
         RecoveryWidget()
         TodayWidget()
+        QuickLogWidget()
         HeatmapWidget()
         LockScreenRecoveryWidget()
         TrainingLiveActivity()
