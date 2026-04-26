@@ -2,19 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { parsePlan, pickToday, daysSinceWeekStart } from "@/lib/plan";
-import {
-  refreshAccessToken,
-  fetchLatestRecovery,
-  fetchTodaysBiometrics,
-} from "@/lib/whoop";
-import { composeMessage } from "@/lib/message";
+import { refreshAccessToken, fetchTodaysBiometrics } from "@/lib/whoop";
 import { sendTelegram } from "@/lib/telegram";
 import {
   isSkipped,
   getSwap,
   setRecoverySnapshot,
   setBiometricSnapshot,
+  listBiometricSnapshots,
 } from "@/lib/kv";
+import { computeTrends } from "@/lib/trends";
+import type { BiometricSnapshot } from "@/lib/whoop";
+import { decideToday } from "@/lib/coach";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -68,27 +67,44 @@ export async function GET(req: NextRequest) {
 
     const accessToken = await refreshAccessToken();
 
-    // Persist full biometric snapshot — best-effort, don't break main flow
-    try {
-      const snapshot = await fetchTodaysBiometrics(accessToken);
-      await setBiometricSnapshot(todayISO, snapshot);
-    } catch {
-      // snapshot persistence is non-critical; continue
+    // Fetch full biometric snapshot for today
+    const snapshot = await fetchTodaysBiometrics(accessToken);
+    await setBiometricSnapshot(todayISO, snapshot);
+
+    // Persist recovery score for weekly summary
+    if (
+      snapshot.recovery.status === "scored" &&
+      typeof snapshot.recovery.score === "number"
+    ) {
+      await setRecoverySnapshot(todayISO, snapshot.recovery.score);
     }
 
-    const recovery = await fetchLatestRecovery(accessToken);
+    // Compute trends from 28-day biometric history
+    const rawSnaps = await listBiometricSnapshots(28);
+    const trends = computeTrends(rawSnaps as BiometricSnapshot[]);
 
-    let text: string;
-    if (recovery.status === "scored") {
-      await setRecoverySnapshot(todayISO, recovery.score);
-      text = composeMessage(recovery.score, todayPlan);
-    } else if (recovery.status === "pending") {
-      text = `Recovery still computing on Whoop's side. I'll send today's plan once it's ready (try /api/cron/daily later).`;
-    } else if (recovery.status === "unscorable") {
-      text = `Whoop reports unscorable recovery (likely a sensor issue overnight). Default to Z2 + mobility today.`;
-    } else {
-      text = `No Whoop recovery record yet today. Default to a moderate session if you feel good.`;
-    }
+    // Science-grounded decision
+    const decision = decideToday(
+      snapshot.recovery.status,
+      snapshot.recovery.score ?? null,
+      snapshot.recovery.hrv_rmssd_ms ?? null,
+      trends,
+    );
+
+    // Build Telegram message
+    const planLine = decision.hard_stop
+      ? "Mandatory rest. Z2 walk if you feel restless. Sleep early."
+      : todayPlan
+        ? `Today: ${todayPlan.summary}`
+        : "Rest day.";
+
+    const messageLines: string[] = [
+      `${decision.emoji} ${decision.reason}`,
+      planLine,
+      ...decision.flags.map((f) => `⚠️ ${f}`),
+    ];
+
+    const text = messageLines.join("\n");
     const stale = daysSinceWeekStart(plan) >= 14;
     const finalText = stale
       ? `⚠️ plan.yml is 14+ days old — run Sunday ritual.\n${text}`
@@ -97,7 +113,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      recoveryStatus: recovery.status,
+      recoveryStatus: snapshot.recovery.status,
+      band: decision.band,
       sent: finalText,
     });
   } catch (e) {
