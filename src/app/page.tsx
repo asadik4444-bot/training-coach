@@ -43,8 +43,25 @@ async function isAuthorized(
     if (await verifyToken(session, expected)) return true;
   }
 
-  // Fall back: accept ?key= directly (user will be redirected to set cookie next time)
-  return searchParamsKey === expected;
+  // Fall back: accept ?key= directly AND set the cookie so internal links work
+  if (searchParamsKey === expected) {
+    try {
+      const { buildSignedToken, COOKIE_MAX_AGE } =
+        await import("@/app/api/auth/dashboard/route");
+      const token = await buildSignedToken(expected);
+      cookieStore.set("tc_session", token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "strict",
+        path: "/",
+        maxAge: COOKIE_MAX_AGE,
+      });
+    } catch {
+      // Cookie set may fail in some contexts; auth still succeeds via key
+    }
+    return true;
+  }
+  return false;
 }
 
 // ── Unauthorised view ─────────────────────────────────────────────────────────
@@ -1135,11 +1152,19 @@ export default async function Page({ searchParams }: Props) {
           }}
         >
           {showDetail ? (
-            <a href="?" style={{ color: "var(--text-dim)" }}>
+            <a
+              href={key ? `?key=${encodeURIComponent(key)}` : "?"}
+              style={{ color: "var(--text-dim)" }}
+            >
               ← hero only
             </a>
           ) : (
-            <a href="?detail=1" style={{ color: "var(--text-dim)" }}>
+            <a
+              href={
+                key ? `?key=${encodeURIComponent(key)}&detail=1` : "?detail=1"
+              }
+              style={{ color: "var(--text-dim)" }}
+            >
               + full detail
             </a>
           )}
