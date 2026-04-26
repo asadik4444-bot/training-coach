@@ -15,6 +15,7 @@ import { parsePlan, pickToday } from "@/lib/plan";
 import { cookies } from "next/headers";
 import { opener } from "@/lib/voice";
 import { classifyRecovery } from "@/lib/recovery";
+import StickyToday from "@/components/StickyToday";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -408,6 +409,16 @@ export default async function Page({ searchParams }: Props) {
   // Coach voice opener
   const coachOpener = opener(recBand);
 
+  // Recovery emoji for compact sticky strip
+  const recEmoji =
+    recScore != null
+      ? recScore >= 67
+        ? "🟢"
+        : recScore >= 34
+          ? "🟡"
+          : "🔴"
+      : "⚪";
+
   // HRV sparkline values
   const hrvValues = snaps30
     .filter((s) => typeof s.recovery.hrv_rmssd_ms === "number")
@@ -563,100 +574,112 @@ export default async function Page({ searchParams }: Props) {
           </span>
         </div>
 
-        {/* TODAY hero */}
-        <div
-          style={{
-            background:
-              "linear-gradient(135deg, var(--bg-card) 0%, var(--bg) 100%)",
-            borderRadius: "16px",
-            padding: "1.25rem 1.5rem",
-            marginBottom: "0.75rem",
-            border: `1px solid ${recColor}33`,
-            boxShadow: `0 0 20px ${recColor}18`,
-          }}
+        {/* TODAY hero — sticky wrapper collapses on scroll */}
+        <StickyToday
+          recColor={recColor}
+          recStr={recStr}
+          recEmoji={recEmoji}
+          coachOpener={coachOpener}
+          hrvStr={hrvStr}
+          rhrStr={rhrStr}
+          sleepEffStr={sleepEffStr}
+          sleepDurStr={sleepDurStr}
+          todayPlan={todayPlan}
         >
           <div
             style={{
-              fontSize: "0.7rem",
-              textTransform: "uppercase",
-              letterSpacing: "0.08em",
-              color: "var(--text-dim)",
-              marginBottom: "0.6rem",
-              fontWeight: 600,
-            }}
-          >
-            TODAY
-          </div>
-
-          {/* Recovery score — big, with glow */}
-          <div
-            className="mono metric-glow"
-            style={{
-              fontSize: "3rem",
-              fontWeight: 700,
-              color: recColor,
-              lineHeight: 1,
-              marginBottom: "0.25rem",
-            }}
-          >
-            {recStr}
-          </div>
-
-          {/* Coach voice */}
-          <div
-            style={{
-              fontSize: "0.9rem",
-              color: "var(--text-muted)",
-              fontStyle: "italic",
+              background:
+                "linear-gradient(135deg, var(--bg-card) 0%, var(--bg) 100%)",
+              borderRadius: "16px",
+              padding: "1.25rem 1.5rem",
               marginBottom: "0.75rem",
-              lineHeight: 1.4,
+              border: `1px solid ${recColor}33`,
+              boxShadow: `0 0 20px ${recColor}18`,
             }}
           >
-            "{coachOpener}"
-          </div>
-
-          {/* HRV / RHR / Sleep row */}
-          <div
-            style={{
-              display: "flex",
-              gap: "1rem",
-              fontSize: "0.8rem",
-              color: "var(--text-muted)",
-              marginBottom: todayPlan ? "0.75rem" : "0",
-              flexWrap: "wrap",
-            }}
-          >
-            <span>
-              HRV <strong style={{ color: "var(--text)" }}>{hrvStr}</strong>
-            </span>
-            <span>
-              RHR <strong style={{ color: "var(--text)" }}>{rhrStr}</strong>
-            </span>
-            <span>
-              Sleep{" "}
-              <strong style={{ color: "var(--text)" }}>
-                {sleepEffStr}
-                {sleepDurStr}
-              </strong>
-            </span>
-          </div>
-
-          {/* Today's plan */}
-          {todayPlan && (
             <div
               style={{
-                background: "var(--bg)",
-                borderRadius: "8px",
-                padding: "0.5rem 0.75rem",
-                fontSize: "0.8rem",
-                color: "var(--text)",
-                borderLeft: `3px solid ${recColor}`,
+                fontSize: "0.7rem",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: "var(--text-dim)",
+                marginBottom: "0.6rem",
+                fontWeight: 600,
               }}
             >
-              {todayPlan}
+              TODAY
             </div>
-          )}
-        </div>
+
+            {/* Recovery score — big, with glow */}
+            <div
+              className="mono metric-glow"
+              style={{
+                fontSize: "3rem",
+                fontWeight: 700,
+                color: recColor,
+                lineHeight: 1,
+                marginBottom: "0.25rem",
+              }}
+            >
+              {recStr}
+            </div>
+
+            {/* Coach voice */}
+            <div
+              style={{
+                fontSize: "0.9rem",
+                color: "var(--text-muted)",
+                fontStyle: "italic",
+                marginBottom: "0.75rem",
+                lineHeight: 1.4,
+              }}
+            >
+              "{coachOpener}"
+            </div>
+
+            {/* HRV / RHR / Sleep row */}
+            <div
+              style={{
+                display: "flex",
+                gap: "1rem",
+                fontSize: "0.8rem",
+                color: "var(--text-muted)",
+                marginBottom: todayPlan ? "0.75rem" : "0",
+                flexWrap: "wrap",
+              }}
+            >
+              <span>
+                HRV <strong style={{ color: "var(--text)" }}>{hrvStr}</strong>
+              </span>
+              <span>
+                RHR <strong style={{ color: "var(--text)" }}>{rhrStr}</strong>
+              </span>
+              <span>
+                Sleep{" "}
+                <strong style={{ color: "var(--text)" }}>
+                  {sleepEffStr}
+                  {sleepDurStr}
+                </strong>
+              </span>
+            </div>
+
+            {/* Today's plan */}
+            {todayPlan && (
+              <div
+                style={{
+                  background: "var(--bg)",
+                  borderRadius: "8px",
+                  padding: "0.5rem 0.75rem",
+                  fontSize: "0.8rem",
+                  color: "var(--text)",
+                  borderLeft: `3px solid ${recColor}`,
+                }}
+              >
+                {todayPlan}
+              </div>
+            )}
+          </div>
+        </StickyToday>
 
         {/* Quick streaks bar */}
         <div
@@ -669,7 +692,7 @@ export default async function Page({ searchParams }: Props) {
             marginBottom: "0.75rem",
             fontSize: "0.8rem",
             color: "var(--text-muted)",
-            border: "1px solid #334155",
+            border: "1px solid var(--border)",
           }}
         >
           <span>
