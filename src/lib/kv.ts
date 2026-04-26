@@ -1,20 +1,44 @@
-import { createClient } from "redis";
+import { createClient, type RedisClientType } from "redis";
 
 const KEY = "whoop:refresh_token";
 const SIXTY_DAYS_SECONDS = 60 * 24 * 3600; // 5184000
 
+// ── Singleton Redis client (module-level, lazy connect, reused across calls) ──
+
+let _cached: RedisClientType | null = null;
+let _connecting: Promise<RedisClientType> | null = null;
+
+async function getClient(): Promise<RedisClientType> {
+  if (_cached?.isOpen) return _cached;
+  if (_connecting) return _connecting;
+  _connecting = (async () => {
+    const url = process.env.KV_REDIS_URL;
+    if (!url) throw new Error("KV_REDIS_URL not set");
+    const client = createClient({ url }) as RedisClientType;
+    // Clear cached reference on any disconnection/error so next call reconnects
+    client.on("error", () => {
+      _cached = null;
+    });
+    client.on("end", () => {
+      _cached = null;
+    });
+    client.on("disconnect", () => {
+      _cached = null;
+    });
+    await client.connect();
+    _cached = client;
+    return client;
+  })();
+  const c = await _connecting;
+  _connecting = null;
+  return c;
+}
+
 async function withClient<T>(
-  fn: (c: ReturnType<typeof createClient>) => Promise<T>,
+  fn: (c: RedisClientType) => Promise<T>,
 ): Promise<T> {
-  const url = process.env.KV_REDIS_URL;
-  if (!url) throw new Error("KV_REDIS_URL not set");
-  const client = createClient({ url });
-  await client.connect();
-  try {
-    return await fn(client);
-  } finally {
-    await client.quit();
-  }
+  const c = await getClient();
+  return fn(c);
 }
 
 export async function saveRefreshToken(refreshToken: string): Promise<void> {
@@ -110,15 +134,15 @@ export async function getBiometricSnapshot(
 export async function listBiometricSnapshots(
   daysBack: number,
 ): Promise<unknown[]> {
-  const out: unknown[] = [];
-  for (let i = daysBack - 1; i >= 0; i--) {
+  const dates = Array.from({ length: daysBack }, (_, i) => {
     const d = new Date();
-    d.setUTCDate(d.getUTCDate() - i);
-    const date = d.toISOString().slice(0, 10);
-    const snap = await getBiometricSnapshot(date);
-    if (snap) out.push(snap);
-  }
-  return out;
+    d.setUTCDate(d.getUTCDate() - (daysBack - 1 - i));
+    return d.toISOString().slice(0, 10);
+  });
+  const snaps = await Promise.all(
+    dates.map((date) => getBiometricSnapshot(date)),
+  );
+  return snaps.filter((s) => s != null);
 }
 
 // ── body measurements ────────────────────────────────────────────────────────
@@ -147,15 +171,18 @@ export async function listBodyMeasurements(
   field: "weight" | "waist",
   daysBack: number,
 ): Promise<Array<{ date: string; value: number }>> {
-  const out: Array<{ date: string; value: number }> = [];
-  for (let i = daysBack - 1; i >= 0; i--) {
+  const dates = Array.from({ length: daysBack }, (_, i) => {
     const d = new Date();
-    d.setUTCDate(d.getUTCDate() - i);
-    const date = d.toISOString().slice(0, 10);
-    const v = await getBodyMeasurement(date, field);
-    if (v != null) out.push({ date, value: v });
-  }
-  return out;
+    d.setUTCDate(d.getUTCDate() - (daysBack - 1 - i));
+    return d.toISOString().slice(0, 10);
+  });
+  const results = await Promise.all(
+    dates.map(async (date) => {
+      const v = await getBodyMeasurement(date, field);
+      return v != null ? { date, value: v } : null;
+    }),
+  );
+  return results.filter((r): r is { date: string; value: number } => r != null);
 }
 
 // ── done entry (RPE / RIR / soreness) ────────────────────────────────────────
@@ -189,15 +216,13 @@ export async function getDoneEntry(date: string): Promise<DoneEntry | null> {
 }
 
 export async function listDoneEntries(daysBack: number): Promise<DoneEntry[]> {
-  const out: DoneEntry[] = [];
-  for (let i = daysBack - 1; i >= 0; i--) {
+  const dates = Array.from({ length: daysBack }, (_, i) => {
     const d = new Date();
-    d.setUTCDate(d.getUTCDate() - i);
-    const date = d.toISOString().slice(0, 10);
-    const e = await getDoneEntry(date);
-    if (e) out.push(e);
-  }
-  return out;
+    d.setUTCDate(d.getUTCDate() - (daysBack - 1 - i));
+    return d.toISOString().slice(0, 10);
+  });
+  const results = await Promise.all(dates.map((date) => getDoneEntry(date)));
+  return results.filter((e): e is DoneEntry => e != null);
 }
 
 // ── goals ─────────────────────────────────────────────────────────────────────
@@ -217,9 +242,11 @@ export async function listAllGoals(): Promise<
   Record<GoalField, number | null>
 > {
   const fields: GoalField[] = ["weight", "waist", "hrv", "rhr"];
-  const out: Partial<Record<GoalField, number | null>> = {};
-  for (const f of fields) out[f] = await getGoal(f);
-  return out as Record<GoalField, number | null>;
+  const values = await Promise.all(fields.map((f) => getGoal(f)));
+  return Object.fromEntries(fields.map((f, i) => [f, values[i]])) as Record<
+    GoalField,
+    number | null
+  >;
 }
 
 // ── protein tracking ─────────────────────────────────────────────────────────
@@ -242,15 +269,18 @@ export async function getProtein(date: string): Promise<boolean | null> {
 export async function listProtein(
   daysBack: number,
 ): Promise<Array<{ date: string; hit: boolean }>> {
-  const out: Array<{ date: string; hit: boolean }> = [];
-  for (let i = daysBack - 1; i >= 0; i--) {
+  const dates = Array.from({ length: daysBack }, (_, i) => {
     const d = new Date();
-    d.setUTCDate(d.getUTCDate() - i);
-    const date = d.toISOString().slice(0, 10);
-    const v = await getProtein(date);
-    if (v != null) out.push({ date, hit: v });
-  }
-  return out;
+    d.setUTCDate(d.getUTCDate() - (daysBack - 1 - i));
+    return d.toISOString().slice(0, 10);
+  });
+  const results = await Promise.all(
+    dates.map(async (date) => {
+      const v = await getProtein(date);
+      return v != null ? { date, hit: v } : null;
+    }),
+  );
+  return results.filter((r): r is { date: string; hit: boolean } => r != null);
 }
 
 // ── bedtime tracking ──────────────────────────────────────────────────────────
@@ -268,15 +298,18 @@ export async function getBedtime(date: string): Promise<string | null> {
 export async function listBedtimes(
   daysBack: number,
 ): Promise<Array<{ date: string; time: string }>> {
-  const out: Array<{ date: string; time: string }> = [];
-  for (let i = daysBack - 1; i >= 0; i--) {
+  const dates = Array.from({ length: daysBack }, (_, i) => {
     const d = new Date();
-    d.setUTCDate(d.getUTCDate() - i);
-    const date = d.toISOString().slice(0, 10);
-    const t = await getBedtime(date);
-    if (t != null) out.push({ date, time: t });
-  }
-  return out;
+    d.setUTCDate(d.getUTCDate() - (daysBack - 1 - i));
+    return d.toISOString().slice(0, 10);
+  });
+  const results = await Promise.all(
+    dates.map(async (date) => {
+      const t = await getBedtime(date);
+      return t != null ? { date, time: t } : null;
+    }),
+  );
+  return results.filter((r): r is { date: string; time: string } => r != null);
 }
 
 // ── pain log ──────────────────────────────────────────────────────────────────
@@ -310,15 +343,20 @@ export async function getPainEntries(date: string): Promise<PainEntry[]> {
 export async function listPainEntries(
   daysBack: number,
 ): Promise<Array<{ date: string; entries: PainEntry[] }>> {
-  const out: Array<{ date: string; entries: PainEntry[] }> = [];
-  for (let i = daysBack - 1; i >= 0; i--) {
+  const dates = Array.from({ length: daysBack }, (_, i) => {
     const d = new Date();
-    d.setUTCDate(d.getUTCDate() - i);
-    const date = d.toISOString().slice(0, 10);
-    const entries = await getPainEntries(date);
-    if (entries.length > 0) out.push({ date, entries });
-  }
-  return out;
+    d.setUTCDate(d.getUTCDate() - (daysBack - 1 - i));
+    return d.toISOString().slice(0, 10);
+  });
+  const results = await Promise.all(
+    dates.map(async (date) => {
+      const entries = await getPainEntries(date);
+      return entries.length > 0 ? { date, entries } : null;
+    }),
+  );
+  return results.filter(
+    (r): r is { date: string; entries: PainEntry[] } => r != null,
+  );
 }
 
 // ── durable archive (no TTL) ─────────────────────────────────────────────────
