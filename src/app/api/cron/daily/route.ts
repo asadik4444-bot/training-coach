@@ -12,8 +12,10 @@ import {
   listBiometricSnapshots,
 } from "@/lib/kv";
 import { computeTrends } from "@/lib/trends";
+import { computeStreaks } from "@/lib/streak";
 import type { BiometricSnapshot } from "@/lib/whoop";
 import { decideToday, detectDeloadNeed } from "@/lib/coach";
+import { opener, streakCue, adherenceCue, deloadCelebrate } from "@/lib/voice";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -94,6 +96,30 @@ export async function GET(req: NextRequest) {
     // Deload detection — prepend warning if 2+ chronic overreaching signals
     const deload = detectDeloadNeed(trends);
 
+    // Compute streaks for voice cues
+    const skipMap: Record<string, boolean> = {};
+    await Promise.all(
+      Array.from({ length: 14 }, (_, i) => {
+        const d = new Date();
+        d.setUTCDate(d.getUTCDate() - i);
+        const date = d.toISOString().slice(0, 10);
+        return isSkipped(date).then((v) => {
+          skipMap[date] = v;
+        });
+      }),
+    );
+    const streaks = computeStreaks(rawSnaps as BiometricSnapshot[], skipMap);
+
+    // Count skips this week (Mon–today)
+    const weekStart = new Date(todayDate);
+    weekStart.setDate(weekStart.getDate() - ((weekday + 6) % 7)); // Monday
+    let skippedThisWeek = 0;
+    for (const [date, skipped] of Object.entries(skipMap)) {
+      if (skipped && date >= weekStart.toISOString().slice(0, 10)) {
+        skippedThisWeek++;
+      }
+    }
+
     // Build Telegram message
     const planLine = decision.hard_stop
       ? "Mandatory rest. Z2 walk if you feel restless. Sleep early."
@@ -103,10 +129,13 @@ export async function GET(req: NextRequest) {
 
     const messageLines: string[] = [];
 
+    // Voice opener
+    messageLines.push(opener(decision.band));
+
     if (deload.triggered) {
       messageLines.push(
         `🛑 DELOAD SIGNAL: ${deload.reasons.join(", ")}`,
-        "Consider 5-7 days of reduced volume (50-60%) and easy cardio.",
+        deloadCelebrate(),
       );
     }
 
@@ -115,6 +144,14 @@ export async function GET(req: NextRequest) {
       planLine,
       ...decision.flags.map((f) => `⚠️ ${f}`),
     );
+
+    // Streak cue after plan line
+    const sc = streakCue(streaks.green_recovery);
+    if (sc) messageLines.push(sc);
+
+    // Adherence cue
+    const ac = adherenceCue(skippedThisWeek);
+    if (ac) messageLines.push(ac);
 
     const text = messageLines.join("\n");
     const stale = daysSinceWeekStart(plan) >= 14;
