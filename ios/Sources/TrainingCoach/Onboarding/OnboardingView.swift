@@ -9,7 +9,7 @@ struct OnboardingView: View {
     @State private var state = LoadState.idle
     @State private var shakeOffset: CGFloat = 0
 
-    @ScaledMetric(relativeTo: .largeTitle) private var brandSize: CGFloat = 44
+    @ScaledMetric(relativeTo: .largeTitle) private var brandSize: CGFloat = 34
     @ScaledMetric(relativeTo: .body) private var subtitleSize: CGFloat = 16
     @ScaledMetric(relativeTo: .body) private var fieldSize: CGFloat = 16
     @ScaledMetric(relativeTo: .body) private var buttonSize: CGFloat = 17
@@ -25,11 +25,11 @@ struct OnboardingView: View {
                 VStack(spacing: 12) {
                     Text("TRAINING COACH")
                         .font(.firaSans(brandSize, weight: .bold))
-                        .kerning(2)
+                        .kerning(1.5)
                         .foregroundStyle(Color.text)
                         .multilineTextAlignment(.center)
-                        .minimumScaleFactor(0.72)
-                        .lineLimit(2)
+                        .minimumScaleFactor(0.6)
+                        .lineLimit(1)
 
                     Text("HRV-aware coaching. Native iOS.")
                         .font(.firaSans(subtitleSize))
