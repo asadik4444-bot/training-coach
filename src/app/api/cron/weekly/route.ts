@@ -13,6 +13,7 @@ import { computeTrends } from "@/lib/trends";
 import type { BiometricSnapshot } from "@/lib/whoop";
 import { parsePlan } from "@/lib/plan";
 import { decideToday } from "@/lib/coach";
+import { toMetrics, summarize, polarizedAnalysis } from "@/lib/analytics";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -129,6 +130,45 @@ export async function GET(req: NextRequest) {
       lines.push(`ACWR: ${acwr} (${interpretation})`);
     }
 
+    // ── Analytics: HRV / RHR / sleep summaries + polarized ratio ────────────
+    const metrics = toMetrics(snaps);
+    const hrvSum = summarize(metrics, "hrv");
+    const rhrSum = summarize(metrics, "rhr");
+    const sleepEffSum = summarize(metrics, "sleep_eff");
+    const pa = polarizedAnalysis(metrics);
+
+    lines.push("");
+    lines.push("📊 This week analytics");
+
+    if (hrvSum.count > 0) {
+      const cvNote =
+        hrvSum.cv_pct != null
+          ? ` CV ${hrvSum.cv_pct.toFixed(1)}%${hrvSum.cv_pct > 12 ? " ⚠️" : ""}`
+          : "";
+      lines.push(
+        `HRV: avg ${hrvSum.avg?.toFixed(1) ?? "?"}ms${cvNote}  ${hrvSum.spark}`,
+      );
+    }
+
+    if (rhrSum.count > 0) {
+      lines.push(
+        `RHR: avg ${rhrSum.avg?.toFixed(0) ?? "?"}bpm  ${rhrSum.spark}`,
+      );
+    }
+
+    if (sleepEffSum.count > 0) {
+      lines.push(
+        `Sleep eff: avg ${sleepEffSum.avg?.toFixed(0) ?? "?"}%  ${sleepEffSum.spark}`,
+      );
+    }
+
+    if (pa.compliance !== "unknown") {
+      const ratioStr = pa.ratio != null ? pa.ratio.toFixed(2) : "∞";
+      lines.push(
+        `Zones ratio: ${ratioStr} — ${pa.compliance} (low ${pa.low_min}m / high ${pa.high_min}m)`,
+      );
+    }
+
     // ── Decision flags for today (deduped) ──────────────────────────────────
     // Use today's snapshot (index 0 = today in the listBiometricSnapshots result)
     const todaySnap = snaps.find((s) => {
@@ -174,6 +214,17 @@ export async function GET(req: NextRequest) {
       trends.hrv_today_vs_baseline_pct < -10
     ) {
       recs.push("Build in a deload");
+    }
+
+    // Polarized compliance
+    if (pa.compliance === "threshold") {
+      recs.push(
+        "Add Z2 volume next week — ratio below 2, too much moderate grind",
+      );
+    } else if (pa.compliance === "pyramidal") {
+      recs.push(
+        "Push polarization — add Z2 or reduce Z3 work (target ratio ≥4)",
+      );
     }
 
     if (recs.length > 0) {
