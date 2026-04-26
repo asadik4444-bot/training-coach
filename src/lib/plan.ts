@@ -1,16 +1,27 @@
 import yaml from "js-yaml";
+import { z } from "zod";
 
-export type DayType = "lift" | "run";
-export interface PlanDay {
-  type: DayType;
-  focus?: string;
-  summary: string;
-}
-export interface Plan {
-  week_start: string;
-  phase?: string; // e.g. hypertrophy | strength | deload | recomp (v3 ritual)
-  days: Record<string, PlanDay>;
-}
+const DayTypeSchema = z.enum(["lift", "run"]);
+
+const PlanDaySchema = z
+  .object({
+    type: DayTypeSchema,
+    focus: z.string().optional(),
+    summary: z.string(),
+  })
+  .strict();
+
+export const PlanSchema = z
+  .object({
+    week_start: z.string(),
+    phase: z.string().optional(),
+    days: z.record(z.string(), PlanDaySchema),
+  })
+  .strict();
+
+export type DayType = z.infer<typeof DayTypeSchema>;
+export type PlanDay = z.infer<typeof PlanDaySchema>;
+export type Plan = z.infer<typeof PlanSchema>;
 
 const WEEKDAY_NAMES = [
   "sunday",
@@ -23,7 +34,7 @@ const WEEKDAY_NAMES = [
 ];
 
 export function parsePlan(source: string): Plan {
-  return yaml.load(source) as Plan;
+  return PlanSchema.parse(yaml.load(source));
 }
 
 export function pickToday(plan: Plan, weekdayIndex: number): PlanDay | null {
