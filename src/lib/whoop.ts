@@ -3,6 +3,7 @@ import { saveRefreshToken, loadRefreshToken } from "./kv";
 const WHOOP_AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2/auth";
 const WHOOP_TOKEN_URL = "https://api.prod.whoop.com/oauth/oauth2/token";
 const WHOOP_API = "https://api.prod.whoop.com/developer/v2";
+const WHOOP_TIME_ZONE = "Europe/Zurich";
 
 const SCOPES = "read:recovery read:cycles read:sleep read:workout offline";
 
@@ -95,11 +96,13 @@ export async function refreshAccessToken(): Promise<string> {
   return data.access_token;
 }
 
-export type RecoveryFetchResult =
+type RecoveryFetchState =
   | { status: "scored"; score: number }
   | { status: "pending" }
   | { status: "unscorable" }
   | { status: "no_record" };
+
+export type RecoveryFetchResult = RecoveryFetchState | null;
 
 // ── Full biometric snapshot ─────────────────────────────────────────────────
 
@@ -149,33 +152,21 @@ export interface BiometricSnapshot {
 export async function fetchLatestRecovery(
   accessToken: string,
 ): Promise<RecoveryFetchResult> {
-  const res = await fetch(`${WHOOP_API}/recovery?limit=1`, {
-    headers: { authorization: `Bearer ${accessToken}` },
-  });
-  if (!res.ok) {
-    throw new Error(`Whoop recovery fetch failed: ${res.status}`);
-  }
-  const data = (await res.json()) as {
-    records?: Array<{
-      score_state?: string;
-      score?: { recovery_score?: number };
-    }>;
-  };
-  const records = data.records ?? [];
-  if (records.length === 0) return { status: "no_record" };
-  const rec = records[0];
-  const state = rec.score_state;
-  if (state === "SCORED" && typeof rec.score?.recovery_score === "number") {
-    return { status: "scored", score: Math.round(rec.score.recovery_score) };
-  }
-  if (state === "UNSCORABLE") return { status: "unscorable" };
-  return { status: "pending" };
+  const cycle = await fetchTodaysCycle(accessToken);
+  if (!cycle?.id || cycle.score_state !== "SCORED") return null;
+  const rec = await fetchRecoveryForCycle(accessToken, cycle.id);
+  return rec ? recoveryRecordToFetchResult(rec) : null;
 }
 
 // ── fetchTodaysBiometrics ────────────────────────────────────────────────────
 
 function authHeaders(accessToken: string): Record<string, string> {
   return { authorization: `Bearer ${accessToken}` };
+}
+
+function toZurichDate(isoTs: string | Date): string {
+  const d = typeof isoTs === "string" ? new Date(isoTs) : isoTs;
+  return d.toLocaleDateString("en-CA", { timeZone: WHOOP_TIME_ZONE });
 }
 
 function msToMin(ms: number): number {
@@ -197,6 +188,7 @@ type WhoopRecoveryRecord = {
 type WhoopCycleRecord = {
   id?: number;
   start?: string;
+  end?: string;
   score_state?: string;
   score?: {
     strain?: number;
@@ -205,6 +197,92 @@ type WhoopCycleRecord = {
     max_heart_rate?: number;
   };
 };
+
+async function fetchTodaysCycle(
+  accessToken: string,
+): Promise<WhoopCycleRecord | null> {
+  const now = new Date();
+  const date = toZurichDate(now);
+  const params = new URLSearchParams({
+    start: `${date}T00:00:00.000Z`,
+    end: now.toISOString(),
+    limit: "1",
+  });
+  const res = await fetch(`${WHOOP_API}/cycle?${params.toString()}`, {
+    headers: authHeaders(accessToken),
+  });
+  if (!res.ok) {
+    throw new Error(`Whoop cycle fetch failed: ${res.status}`);
+  }
+  const data = (await res.json()) as { records?: WhoopCycleRecord[] };
+  return (
+    (data.records ?? []).find(
+      (cycle) => cycle.start && toZurichDate(cycle.start) === date,
+    ) ?? null
+  );
+}
+
+async function fetchRecoveryForCycle(
+  accessToken: string,
+  cycleId: number,
+): Promise<WhoopRecoveryRecord | null> {
+  const res = await fetch(`${WHOOP_API}/cycle/${cycleId}/recovery`, {
+    headers: authHeaders(accessToken),
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new Error(`Whoop cycle recovery fetch failed: ${res.status}`);
+  }
+  return (await res.json()) as WhoopRecoveryRecord;
+}
+
+function recoveryRecordToFetchResult(
+  rec: WhoopRecoveryRecord,
+): RecoveryFetchState {
+  const state = rec.score_state;
+  if (state === "SCORED" && typeof rec.score?.recovery_score === "number") {
+    return { status: "scored", score: Math.round(rec.score.recovery_score) };
+  }
+  if (state === "UNSCORABLE") return { status: "unscorable" };
+  return { status: "pending" };
+}
+
+function recoveryRecordToSnapshot(
+  rec: WhoopRecoveryRecord,
+): BiometricSnapshot["recovery"] {
+  const state = rec.score_state;
+  if (state === "SCORED" && rec.score) {
+    return {
+      status: "scored",
+      score:
+        typeof rec.score.recovery_score === "number"
+          ? Math.round(rec.score.recovery_score)
+          : undefined,
+      hrv_rmssd_ms:
+        typeof rec.score.hrv_rmssd_milli === "number"
+          ? rec.score.hrv_rmssd_milli
+          : undefined,
+      rhr_bpm:
+        typeof rec.score.resting_heart_rate === "number"
+          ? Math.round(rec.score.resting_heart_rate)
+          : undefined,
+    };
+  }
+  if (state === "UNSCORABLE") return { status: "unscorable" };
+  return { status: "pending" };
+}
+
+function cycleRecordToSnapshot(
+  cycle: WhoopCycleRecord | null,
+): BiometricSnapshot["cycle"] | undefined {
+  if (cycle?.score_state !== "SCORED" || !cycle.score) return undefined;
+  return {
+    strain: cycle.score.strain ?? 0,
+    kilojoules: cycle.score.kilojoule ?? 0,
+    avg_hr: cycle.score.average_heart_rate ?? 0,
+    max_hr: cycle.score.max_heart_rate ?? 0,
+  };
+}
 
 type WhoopSleepRecord = {
   cycle_id?: number;
@@ -440,18 +518,13 @@ export async function fetchHistorical(
 export async function fetchTodaysBiometrics(
   accessToken: string,
 ): Promise<BiometricSnapshot> {
-  // Europe/Zurich today date
-  const todayDate = new Date(
-    new Date().toLocaleString("en-US", { timeZone: "Europe/Zurich" }),
-  );
-  const date = todayDate.toISOString().slice(0, 10);
+  const date = toZurichDate(new Date());
 
   const headers = authHeaders(accessToken);
 
   // Parallel best-effort fetches — individual failures yield undefined
-  const [recoveryRaw, cycleRaw, sleepRaw, workoutRaw] = await Promise.all([
-    fetch(`${WHOOP_API}/recovery?limit=1`, { headers }).catch(() => undefined),
-    fetch(`${WHOOP_API}/cycle?limit=1`, { headers }).catch(() => undefined),
+  const [todayCycle, sleepRaw, workoutRaw] = await Promise.all([
+    fetchTodaysCycle(accessToken).catch(() => null),
     fetch(`${WHOOP_API}/activity/sleep?limit=1`, { headers }).catch(
       () => undefined,
     ),
@@ -462,72 +535,18 @@ export async function fetchTodaysBiometrics(
 
   // ── Recovery ──────────────────────────────────────────────────────────────
   let recoveryField: BiometricSnapshot["recovery"] = { status: "no_record" };
-  if (recoveryRaw && recoveryRaw.ok) {
-    const d = (await recoveryRaw.json().catch(() => null)) as {
-      records?: Array<{
-        score_state?: string;
-        score?: {
-          recovery_score?: number;
-          hrv_rmssd_milli?: number;
-          resting_heart_rate?: number;
-        };
-      }>;
-    } | null;
-    const recs = d?.records ?? [];
-    if (recs.length > 0) {
-      const r = recs[0];
-      const state = r.score_state;
-      if (state === "SCORED" && r.score) {
-        recoveryField = {
-          status: "scored",
-          score:
-            typeof r.score.recovery_score === "number"
-              ? Math.round(r.score.recovery_score)
-              : undefined,
-          hrv_rmssd_ms:
-            typeof r.score.hrv_rmssd_milli === "number"
-              ? r.score.hrv_rmssd_milli
-              : undefined,
-          rhr_bpm:
-            typeof r.score.resting_heart_rate === "number"
-              ? Math.round(r.score.resting_heart_rate)
-              : undefined,
-        };
-      } else if (state === "UNSCORABLE") {
-        recoveryField = { status: "unscorable" };
-      } else {
-        recoveryField = { status: "pending" };
-      }
+  if (todayCycle?.id != null && todayCycle.score_state === "SCORED") {
+    const recoveryRecord = await fetchRecoveryForCycle(
+      accessToken,
+      todayCycle.id,
+    ).catch(() => null);
+    if (recoveryRecord) {
+      recoveryField = recoveryRecordToSnapshot(recoveryRecord);
     }
   }
 
   // ── Cycle ─────────────────────────────────────────────────────────────────
-  let cycleField: BiometricSnapshot["cycle"] | undefined;
-  if (cycleRaw && cycleRaw.ok) {
-    const d = (await cycleRaw.json().catch(() => null)) as {
-      records?: Array<{
-        score_state?: string;
-        score?: {
-          strain?: number;
-          kilojoule?: number;
-          average_heart_rate?: number;
-          max_heart_rate?: number;
-        };
-      }>;
-    } | null;
-    const recs = d?.records ?? [];
-    if (recs.length > 0) {
-      const c = recs[0];
-      if (c.score_state === "SCORED" && c.score) {
-        cycleField = {
-          strain: c.score.strain ?? 0,
-          kilojoules: c.score.kilojoule ?? 0,
-          avg_hr: c.score.average_heart_rate ?? 0,
-          max_hr: c.score.max_heart_rate ?? 0,
-        };
-      }
-    }
-  }
+  const cycleField = cycleRecordToSnapshot(todayCycle);
 
   // ── Sleep ─────────────────────────────────────────────────────────────────
   let sleepField: BiometricSnapshot["sleep"] | undefined;
