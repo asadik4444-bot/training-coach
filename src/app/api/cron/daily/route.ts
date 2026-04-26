@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { parsePlan, pickToday } from "@/lib/plan";
+import { parsePlan, pickToday, daysSinceWeekStart } from "@/lib/plan";
 import { refreshAccessToken, fetchLatestRecovery } from "@/lib/whoop";
 import { composeMessage } from "@/lib/message";
 import { sendTelegram } from "@/lib/telegram";
@@ -71,12 +71,16 @@ export async function GET(req: NextRequest) {
     } else {
       text = `No Whoop recovery record yet today. Default to a moderate session if you feel good.`;
     }
-    await sendTelegram(text);
+    const stale = daysSinceWeekStart(plan) >= 14;
+    const finalText = stale
+      ? `⚠️ plan.yml is 14+ days old — run Sunday ritual.\n${text}`
+      : text;
+    await sendTelegram(finalText);
 
     return NextResponse.json({
       ok: true,
       recoveryStatus: recovery.status,
-      sent: text,
+      sent: finalText,
     });
   } catch (e) {
     const msg = String(e);
