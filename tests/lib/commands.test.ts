@@ -11,6 +11,7 @@ import {
   handleLoad,
   handleReport,
   handleRecent,
+  handleSetup,
 } from "../../src/lib/commands";
 import type { BiometricSnapshot } from "../../src/lib/whoop";
 
@@ -305,5 +306,45 @@ describe("handleRecent", () => {
     expect(reply.indexOf("2026-04-25")).toBeLessThan(
       reply.indexOf("2026-04-24"),
     );
+  });
+});
+
+// ── /setup ────────────────────────────────────────────────────────────────────
+
+describe("handleSetup", () => {
+  it("calls backfill internally and includes onboarding tips in the reply", async () => {
+    // Mock fetch for the internal backfill HTTP call
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          stored: 87,
+          range: { startISO: "2026-01-26", endISO: "2026-04-26" },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const reply = await handleSetup();
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(reply).toContain("87");
+    expect(reply).toContain("/today");
+    expect(reply).toContain("/report month");
+
+    fetchSpy.mockRestore();
+  });
+
+  it("propagates backfill failure message gracefully", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ ok: false, error: "token expired" }), {
+        status: 200,
+      }),
+    );
+
+    const reply = await handleSetup();
+    expect(reply).toContain("failed");
+
+    fetchSpy.mockRestore();
   });
 });
