@@ -1,6 +1,6 @@
 # training-coach
 
-**v6 — /done + /goal + period comparison reports + deload alerts + cookie auth** | [live](https://training-coach-phi.vercel.app)
+**v7 — coach voice + inline buttons + pain gate + nutrition tracking + visual dashboard** | [live](https://training-coach-phi.vercel.app)
 
 Personal training assistant: fetches WHOOP recovery each morning and sends a Telegram message with the day's plan, adjusted for how recovered you are.
 
@@ -36,13 +36,17 @@ node --env-file=.env.local --experimental-strip-types scripts/set-telegram-webho
 
 ### Day-to-day
 
-| Command        | Effect                                                              |
-| -------------- | ------------------------------------------------------------------- |
-| `/today`       | Today's snapshot: recovery %, HRV, RHR, sleep, workout, plan        |
-| `/log <entry>` | Append a free-text note to today's training log                     |
-| `/skip`        | Mark today as skipped — the cron will not send a plan               |
-| `/swap <day>`  | Replace today's session with another weekday's plan (monday–friday) |
-| `/help`        | List all available commands                                         |
+| Command                      | Effect                                                                      |
+| ---------------------------- | --------------------------------------------------------------------------- |
+| `/today`                     | Today's snapshot: weekday-adaptive — recovery, HRV, plan; Wed/Fri adds ACWR |
+| `/log <entry>`               | Append a free-text note to today's training log                             |
+| `/skip`                      | Mark today as skipped — the cron will not send a plan                       |
+| `/swap <day>`                | Replace today's session with another weekday's plan (monday–friday)         |
+| `/protein y\|n`              | Log whether you hit today's protein target; no arg shows 7-day hit rate     |
+| `/bedtime HH:MM`             | Log tonight's bedtime; no arg shows 7-day average and standard deviation    |
+| `/pain <area> <1–10> [note]` | Log a pain entry; severity ≥8 stops training, ≥6 downgrades intensity       |
+| `/export`                    | Returns URL for the full JSON archive export                                |
+| `/help`                      | List all available commands                                                 |
 
 ### Analytics (require /backfill for meaningful history)
 
@@ -151,10 +155,12 @@ To re-link Whoop after token expiry or initial setup:
 
 ## How it works
 
-- **Daily cron** (`/api/cron/daily`, Mon–Fri 06:00 UTC): checks skip/swap flags, fetches WHOOP recovery, picks today's plan from `plan.yml`, and sends a composed Telegram message.
+- **Daily cron** (`/api/cron/daily`, Mon–Fri 06:00 UTC): checks skip/swap/pain flags, fetches WHOOP recovery, picks today's plan from `plan.yml`, prepends coach voice opener + streak/adherence cues, sends inline keyboard with Confirm/Skip/Swap buttons, appends entry to durable archive.
+- **Post-workout cron** (`/api/cron/post-workout`, Mon–Fri 11:30 UTC): sends a "How was today's session?" inline prompt (Done / Skipped / Modified / Couldn't train) after the training window. Skips if day is already marked skipped.
 - **Weekly cron** (`/api/cron/weekly`, Sun 16:00 UTC): sends a weekly summary with avg recovery, biometric trends (HRV/RHR/sleep sparklines), polarized zone analysis, ACWR, and recommendations.
-- **Monthly route** (`/api/cron/monthly`, 1st of month 07:00 UTC): sends a 30-day report. Note: Vercel Hobby plan supports only 2 scheduled crons — trigger this manually or use an external scheduler (cron-job.org) until a Pro plan is active.
-- **Webhook** (`/api/telegram/webhook`): receives Telegram updates and routes all commands; state is persisted in Redis.
+- **Monthly cron** (`/api/cron/monthly`, 1st of month 07:00 UTC): sends a 30-day report.
+- **Webhook** (`/api/telegram/webhook`): receives Telegram text commands and `callback_query` button taps; routes all commands; state is persisted in Redis.
+- **Export** (`/api/export?key=DASHBOARD_SECRET`): returns full JSON archive of all daily snapshots with no TTL.
 - **Backfill** (`/api/backfill?days=N`): one-shot endpoint (Bearer auth) to pull historical Whoop data. Used by `/backfill` and `/setup` commands.
 - **WHOOP OAuth** (`/api/auth/whoop/start` + `/callback`): one-time flow to store the refresh token.
 

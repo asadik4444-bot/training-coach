@@ -1,5 +1,19 @@
 # Changelog
 
+## v7 (2026-04-26)
+
+- `voice.ts` — personality-driven coach messages: `opener(band)` rotates by UTC date per recovery band, `streakCue(n)`, `adherenceCue(skips)`, `deloadCelebrate()`
+- Daily cron: inline keyboard buttons (Confirm / Skip / Swap Mon/Tue/Wed) via `sendTelegramWithButtons`; message prefixed with coach opener + streak/adherence cues
+- Callback handler: `callback_query` routing in webhook — confirm, skip, swap, done (RPE picker), rpe:<n>
+- Post-workout cron (`/api/cron/post-workout`, Mon–Fri 11:30 UTC): inline "How was today's session?" prompt after training window
+- `/protein y|n` — binary protein-target hit logging (7-day history + hit-rate display)
+- `/bedtime HH:MM` — bedtime logging with 7-day average + σ display
+- `/pain <area> <severity> [note]` — pain log with pre-session gate: severity ≥8 → hard-stop red, ≥6 → downgrade green→yellow
+- Durable archive: `appendToArchive` (no TTL) called from daily cron; `/api/export` endpoint returns full JSON
+- `decideToday()` extended with optional `painSeverity` parameter (5th arg); pain gate rules added before existing band logic
+- `/today` weekday-adaptive: Mon shows recovery + plan; Wed/Fri includes ACWR + trends; weekend shows rest guidance + 7d protein hit rate
+- Dashboard redesign (v7): gradient hero card with coach opener quote, 90-day recovery heatmap, HRV/RHR/sleep sparklines, week-over-week comparison table, goals progress bars (▰▰▰▱▱), all behind `?detail=1`; hero + streak bar always visible
+
 ## v6 (2026-04-26)
 
 - `/done rpe 8 rir 2 soreness 5 [notes]` — structured RPE/RIR/soreness logging with free-form notes; stored in Redis at `done:YYYY-MM-DD` (365-day TTL)
