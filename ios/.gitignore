@@ -1,0 +1,10 @@
+xcuserdata/
+*.xcworkspace/xcuserdata/
+build/
+DerivedData/
+*.xcodeproj/
+.DS_Store
+
+# curl cookie jars (transient, may contain session tokens)
+specs/api-samples/cookies.txt
+specs/api-samples/*.cookies.txt
