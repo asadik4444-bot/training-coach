@@ -232,14 +232,17 @@ async function fetchAllPages<T>(
 
   do {
     const params = new URLSearchParams({
-      start: startISO,
-      end: endISO,
+      start: `${startISO}T00:00:00.000Z`,
+      end: `${endISO}T23:59:59.999Z`,
       limit: "25",
     });
     if (nextToken) params.set("nextToken", nextToken);
     const url = `${WHOOP_API}${path}?${params.toString()}`;
     const res = await fetch(url, { headers });
-    if (!res.ok) break;
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Whoop ${path} ${res.status}: ${body.slice(0, 200)}`);
+    }
     const data = (await res.json()) as { records?: T[]; next_token?: string };
     const records = data.records ?? [];
     results.push(...records);
