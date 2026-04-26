@@ -17,6 +17,7 @@ import { opener } from "@/lib/voice";
 import { classifyRecovery } from "@/lib/recovery";
 import StickyToday from "@/components/StickyToday";
 import Heatmap from "@/components/Heatmap";
+import TrendChart from "@/components/TrendChart";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -373,6 +374,20 @@ export default async function Page({ searchParams }: Props) {
           : null,
     }));
 
+  // 91-day data per metric for TrendChart (server pre-fetched, client slices)
+  const hrv91 = snaps91
+    .filter((s) => typeof s.recovery.hrv_rmssd_ms === "number")
+    .map((s) => ({ date: s.date, value: s.recovery.hrv_rmssd_ms as number }));
+  const rhr91 = snaps91
+    .filter((s) => typeof s.recovery.rhr_bpm === "number")
+    .map((s) => ({ date: s.date, value: s.recovery.rhr_bpm as number }));
+  const sleep91 = snaps91
+    .filter((s) => s.sleep != null)
+    .map((s) => ({ date: s.date, value: s.sleep!.efficiency_pct }));
+  const strain91 = snaps91
+    .filter((s) => typeof s.cycle?.strain === "number")
+    .map((s) => ({ date: s.date, value: s.cycle!.strain as number }));
+
   // Week-over-week: split snaps30 into this-week (0..6) and last-week (7..13)
   const snapsByDaysAgo = new Map<number, BiometricSnapshot>();
   for (const s of snaps60) {
@@ -636,69 +651,57 @@ export default async function Page({ searchParams }: Props) {
         {/* Detail sections — shown only with ?detail=1 */}
         {showDetail && (
           <>
-            {/* HRV sparkline */}
-            <Widget title={`HRV — last ${snaps30.length} days`}>
-              <Sparkline values={hrvValues} color="var(--green)" />
-              <div
-                style={{
-                  display: "flex",
-                  gap: "1rem",
-                  marginTop: "0.4rem",
-                  fontSize: "0.8rem",
-                  color: "var(--text-muted)",
-                  flexWrap: "wrap",
-                }}
-              >
-                <span>
-                  Avg {hrvAvg != null ? `${hrvAvg.toFixed(1)}ms` : "—"}
-                </span>
-                {hrvCv != null && <span>CV {hrvCv.toFixed(1)}%</span>}
-                <span>
-                  Latest{" "}
-                  {hrvLatest != null ? `${Math.round(hrvLatest)}ms` : "—"}
-                </span>
-              </div>
+            {/* HRV trend chart — segmented pill control */}
+            <Widget title="HRV">
+              <TrendChart
+                metric="hrv"
+                data91={hrv91}
+                color="var(--green)"
+                unit="ms"
+              />
+              {hrvCv != null && (
+                <div
+                  style={{
+                    marginTop: "0.25rem",
+                    fontSize: "0.75rem",
+                    color: "var(--text-dim)",
+                  }}
+                >
+                  CV {hrvCv.toFixed(1)}%
+                </div>
+              )}
             </Widget>
 
-            {/* RHR sparkline */}
-            {rhrValues.length >= 2 && (
-              <Widget title={`RHR — last ${snaps30.length} days`}>
-                <Sparkline values={rhrValues} color="var(--red)" />
-                <div
-                  style={{
-                    fontSize: "0.8rem",
-                    color: "var(--text-muted)",
-                    marginTop: "0.4rem",
-                  }}
-                >
-                  Avg{" "}
-                  {(
-                    rhrValues.reduce((a, b) => a + b, 0) / rhrValues.length
-                  ).toFixed(1)}
-                  bpm
-                </div>
-              </Widget>
-            )}
+            {/* RHR trend chart */}
+            <Widget title="RHR">
+              <TrendChart
+                metric="rhr"
+                data91={rhr91}
+                color="var(--red)"
+                unit="bpm"
+                lowerIsBetter
+              />
+            </Widget>
 
-            {/* Sleep efficiency sparkline */}
-            {sleepValues.length >= 2 && (
-              <Widget title={`Sleep efficiency — last ${snaps30.length} days`}>
-                <Sparkline values={sleepValues} color="var(--primary-light)" />
-                <div
-                  style={{
-                    fontSize: "0.8rem",
-                    color: "var(--text-muted)",
-                    marginTop: "0.4rem",
-                  }}
-                >
-                  Avg{" "}
-                  {(
-                    sleepValues.reduce((a, b) => a + b, 0) / sleepValues.length
-                  ).toFixed(1)}
-                  %
-                </div>
-              </Widget>
-            )}
+            {/* Sleep efficiency trend chart */}
+            <Widget title="Sleep Efficiency">
+              <TrendChart
+                metric="sleep"
+                data91={sleep91}
+                color="var(--primary-light)"
+                unit="%"
+              />
+            </Widget>
+
+            {/* Strain trend chart */}
+            <Widget title="Strain">
+              <TrendChart
+                metric="strain"
+                data91={strain91}
+                color="var(--accent)"
+                unit=""
+              />
+            </Widget>
 
             {/* Week-over-week comparison */}
             <Widget title="WEEK OVER WEEK">
