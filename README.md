@@ -1,6 +1,6 @@
 # training-coach
 
-**v5 — visual web dashboard + body comp + streaks + calendar heatmap** | [live](https://training-coach-phi.vercel.app)
+**v6 — /done + /goal + period comparison reports + deload alerts + cookie auth** | [live](https://training-coach-phi.vercel.app)
 
 Personal training assistant: fetches WHOOP recovery each morning and sends a Telegram message with the day's plan, adjusted for how recovered you are.
 
@@ -8,15 +8,15 @@ Personal training assistant: fetches WHOOP recovery each morning and sends a Tel
 
 ## Environment variables
 
-| Variable              | Description                                                                        |
-| --------------------- | ---------------------------------------------------------------------------------- |
-| `KV_REDIS_URL`        | TCP Redis URL from Vercel marketplace Redis                                        |
-| `TELEGRAM_BOT_TOKEN`  | Bot token from @BotFather                                                          |
-| `TELEGRAM_CHAT_ID`    | Your Telegram user ID (single-user app)                                            |
-| `WHOOP_CLIENT_ID`     | WHOOP OAuth client ID                                                              |
-| `WHOOP_CLIENT_SECRET` | WHOOP OAuth client secret                                                          |
-| `CRON_SECRET`         | Bearer token used by the Vercel cron jobs                                          |
-| `DASHBOARD_SECRET`    | Secret key for the web dashboard (?key=...) — generate with `openssl rand -hex 32` |
+| Variable              | Description                                                             |
+| --------------------- | ----------------------------------------------------------------------- |
+| `KV_REDIS_URL`        | TCP Redis URL from Vercel marketplace Redis                             |
+| `TELEGRAM_BOT_TOKEN`  | Bot token from @BotFather                                               |
+| `TELEGRAM_CHAT_ID`    | Your Telegram user ID (single-user app)                                 |
+| `WHOOP_CLIENT_ID`     | WHOOP OAuth client ID                                                   |
+| `WHOOP_CLIENT_SECRET` | WHOOP OAuth client secret                                               |
+| `CRON_SECRET`         | Bearer token used by the Vercel cron jobs                               |
+| `DASHBOARD_SECRET`    | Secret key for the web dashboard — generate with `openssl rand -hex 32` |
 
 ---
 
@@ -63,6 +63,28 @@ node --env-file=.env.local --experimental-strip-types scripts/set-telegram-webho
 | `/waist <cm>`  | Log today's waist circumference (30–200 cm)                    |
 | `/body [N]`    | Body comp trend over last N days — latest + delta (default 30) |
 
+### Session logging (v6)
+
+| Command                        | Effect                                                            |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `/done rpe 8`                  | Log overall RPE for today's session                               |
+| `/done rpe 8 rir 2 soreness 5` | Log RPE, reps-in-reserve, and soreness (each a number)            |
+| `/done bench 80x8 RPE 8`       | Free-form: activity text + structured RPE/RIR/soreness parsed out |
+
+Stored in Redis at `done:YYYY-MM-DD` with 365-day TTL.
+
+### Goals (v6)
+
+| Command           | Effect                                                        |
+| ----------------- | ------------------------------------------------------------- |
+| `/goal weight 75` | Set weight goal (kg)                                          |
+| `/goal waist 80`  | Set waist goal (cm)                                           |
+| `/goal hrv 50`    | Set HRV goal (ms baseline target)                             |
+| `/goal rhr 50`    | Set RHR goal (bpm — lower is fitter)                          |
+| `/goals`          | Show all goals + current progress (delta from today's values) |
+
+Goals have no TTL — persistent until overwritten.
+
 ### Streaks & calendar
 
 | Command     | Effect                                                             |
@@ -72,12 +94,12 @@ node --env-file=.env.local --experimental-strip-types scripts/set-telegram-webho
 
 ### Reports
 
-| Command         | Effect                                                                         |
-| --------------- | ------------------------------------------------------------------------------ |
-| `/report`       | Week summary (same as `/report week`)                                          |
-| `/report week`  | 7-day summary: recovery, HRV, RHR, sleep, strain, ACWR, zones, recommendations |
-| `/report month` | 30-day summary — run `/backfill` first for full data                           |
-| `/report year`  | 365-day summary with monthly breakdown table — run `/backfill` first           |
+| Command         | Effect                                                                     |
+| --------------- | -------------------------------------------------------------------------- |
+| `/report`       | Week summary (same as `/report week`)                                      |
+| `/report week`  | 7-day summary with prior-week comparison columns (Current / Previous / Δ)  |
+| `/report month` | 30-day summary with prior-month comparison columns — run `/backfill` first |
+| `/report year`  | 365-day summary with monthly breakdown table — run `/backfill` first       |
 
 ### Setup
 
@@ -91,9 +113,25 @@ node --env-file=.env.local --experimental-strip-types scripts/set-telegram-webho
 
 ---
 
+## Deload alerts (v6)
+
+The daily cron automatically prepends a `🛑 DELOAD SIGNAL` warning to the Telegram message
+when 2 or more chronic overreaching signals are detected simultaneously:
+
+- HRV >10% below 7-day baseline
+- RHR >5 bpm above 7-day baseline
+- ACWR >1.4
+- 7-day cumulative sleep debt >420 min (7 hours)
+
+When triggered: "Consider 5-7 days of reduced volume (50-60%) and easy cardio."
+
+---
+
 ## Web dashboard
 
-Visit `https://training-coach-phi.vercel.app/?key=<DASHBOARD_SECRET>` for the visual dashboard.
+First visit: navigate to `/api/auth/dashboard?key=<DASHBOARD_SECRET>` — this sets a
+30-day HttpOnly signed cookie and redirects to `/`. Subsequent visits to `/` work
+without the `?key=` parameter.
 
 Set the `DASHBOARD_SECRET` env var in Vercel project settings (generate with `openssl rand -hex 32`).
 
