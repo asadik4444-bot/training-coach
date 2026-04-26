@@ -1,6 +1,6 @@
 # training-coach
 
-**v4 — analytics console + 90-day backfill** | [live](https://training-coach-phi.vercel.app)
+**v5 — visual web dashboard + body comp + streaks + calendar heatmap** | [live](https://training-coach-phi.vercel.app)
 
 Personal training assistant: fetches WHOOP recovery each morning and sends a Telegram message with the day's plan, adjusted for how recovered you are.
 
@@ -8,14 +8,15 @@ Personal training assistant: fetches WHOOP recovery each morning and sends a Tel
 
 ## Environment variables
 
-| Variable              | Description                                 |
-| --------------------- | ------------------------------------------- |
-| `KV_REDIS_URL`        | TCP Redis URL from Vercel marketplace Redis |
-| `TELEGRAM_BOT_TOKEN`  | Bot token from @BotFather                   |
-| `TELEGRAM_CHAT_ID`    | Your Telegram user ID (single-user app)     |
-| `WHOOP_CLIENT_ID`     | WHOOP OAuth client ID                       |
-| `WHOOP_CLIENT_SECRET` | WHOOP OAuth client secret                   |
-| `CRON_SECRET`         | Bearer token used by the Vercel cron jobs   |
+| Variable              | Description                                                                        |
+| --------------------- | ---------------------------------------------------------------------------------- |
+| `KV_REDIS_URL`        | TCP Redis URL from Vercel marketplace Redis                                        |
+| `TELEGRAM_BOT_TOKEN`  | Bot token from @BotFather                                                          |
+| `TELEGRAM_CHAT_ID`    | Your Telegram user ID (single-user app)                                            |
+| `WHOOP_CLIENT_ID`     | WHOOP OAuth client ID                                                              |
+| `WHOOP_CLIENT_SECRET` | WHOOP OAuth client secret                                                          |
+| `CRON_SECRET`         | Bearer token used by the Vercel cron jobs                                          |
+| `DASHBOARD_SECRET`    | Secret key for the web dashboard (?key=...) — generate with `openssl rand -hex 32` |
 
 ---
 
@@ -54,6 +55,21 @@ node --env-file=.env.local --experimental-strip-types scripts/set-telegram-webho
 | `/load`       | Training load: acute (7d) / chronic (28d) strain + ACWR interpretation  |
 | `/recent [N]` | Last N workouts with sport, strain, zone breakdown (default 5)          |
 
+### Body composition
+
+| Command        | Effect                                                         |
+| -------------- | -------------------------------------------------------------- |
+| `/weight <kg>` | Log today's body weight (30–250 kg)                            |
+| `/waist <cm>`  | Log today's waist circumference (30–200 cm)                    |
+| `/body [N]`    | Body comp trend over last N days — latest + delta (default 30) |
+
+### Streaks & calendar
+
+| Command     | Effect                                                             |
+| ----------- | ------------------------------------------------------------------ |
+| `/streak`   | Current green-recovery streak, best streak, no-skip workday streak |
+| `/calendar` | 90-day recovery heatmap rendered as an emoji grid                  |
+
 ### Reports
 
 | Command         | Effect                                                                         |
@@ -72,6 +88,16 @@ node --env-file=.env.local --experimental-strip-types scripts/set-telegram-webho
 
 > **Note:** `/report month`, `/report year`, `/hrv 30`, and similar long-window commands
 > need historical data in Redis. Run `/setup` or `/backfill` once after initial deployment.
+
+---
+
+## Web dashboard
+
+Visit `https://training-coach-phi.vercel.app/?key=<DASHBOARD_SECRET>` for the visual dashboard.
+
+Set the `DASHBOARD_SECRET` env var in Vercel project settings (generate with `openssl rand -hex 32`).
+
+See `docs/dashboard.md` for a guide to reading each widget.
 
 ---
 
