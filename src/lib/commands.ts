@@ -9,6 +9,10 @@ import {
   setBodyMeasurement,
   listBodyMeasurements,
   isSkipped,
+  saveDoneEntry,
+  setGoal,
+  listAllGoals,
+  type GoalField,
 } from "@/lib/kv";
 import { toMetrics, summarize, polarizedAnalysis } from "@/lib/analytics";
 import { computeTrends } from "@/lib/trends";
@@ -66,6 +70,9 @@ export async function handleHelp(): Promise<string> {
     "/weight <kg> — log body weight",
     "/waist <cm> — log waist measurement",
     "/body [N] — body comp trend (default 30 days)",
+    "/done rpe 8 rir 2 soreness 5 [notes] — log session effort",
+    "/goal <field> <value> — set a goal (weight/waist/hrv/rhr)",
+    "/goals — show all goals + current progress",
     "/streak — green-recovery + no-skip streaks",
     "/calendar — 90-day recovery heatmap",
     "/backfill — pull 90 days of history from Whoop",
@@ -590,6 +597,57 @@ export async function handleStreak(todayISO: string): Promise<string> {
   ].join("\n");
 }
 
+// ── /done ─────────────────────────────────────────────────────────────────────
+
+export function parseDoneText(text: string): {
+  rpe?: number;
+  rir?: number;
+  soreness?: number;
+  notes?: string;
+} {
+  const out: { rpe?: number; rir?: number; soreness?: number; notes?: string } =
+    {};
+  const rpeMatch = text.match(/\brpe\s+(\d+(?:\.\d+)?)/i);
+  if (rpeMatch) out.rpe = Number(rpeMatch[1]);
+  const rirMatch = text.match(/\brir\s+(\d+(?:\.\d+)?)/i);
+  if (rirMatch) out.rir = Number(rirMatch[1]);
+  const soreMatch = text.match(/\bsoreness\s+(\d+(?:\.\d+)?)/i);
+  if (soreMatch) out.soreness = Number(soreMatch[1]);
+  const cleaned = text
+    .replace(/\brpe\s+\d+(\.\d+)?/gi, "")
+    .replace(/\brir\s+\d+(\.\d+)?/gi, "")
+    .replace(/\bsoreness\s+\d+(\.\d+)?/gi, "")
+    .trim();
+  if (cleaned.length > 0) out.notes = cleaned;
+  return out;
+}
+
+export async function handleDone(
+  text: string,
+  todayISO: string,
+): Promise<string> {
+  if (!text.trim()) return "Usage: /done rpe 8 rir 2 soreness 5 felt strong";
+  const parsed = parseDoneText(text);
+  if (
+    parsed.rpe == null &&
+    parsed.rir == null &&
+    parsed.soreness == null &&
+    !parsed.notes
+  ) {
+    return "Could not parse anything. Try: /done rpe 8 rir 2 felt strong";
+  }
+  await saveDoneEntry(todayISO, parsed);
+  const summary = [
+    parsed.rpe != null ? `RPE ${parsed.rpe}` : null,
+    parsed.rir != null ? `RIR ${parsed.rir}` : null,
+    parsed.soreness != null ? `soreness ${parsed.soreness}` : null,
+    parsed.notes ? `"${parsed.notes}"` : null,
+  ]
+    .filter(Boolean)
+    .join(" / ");
+  return `✅ Logged: ${summary}`;
+}
+
 // ── /calendar ─────────────────────────────────────────────────────────────────
 
 export async function handleCalendar(): Promise<string> {
@@ -642,5 +700,98 @@ export async function handleCalendar(): Promise<string> {
 
   lines.push("");
   lines.push("🟢 ≥67%  🟡 34-66%  🔴 <34%  ⬜ no data");
+  return lines.join("\n");
+}
+
+// ── /goal /goals ──────────────────────────────────────────────────────────────
+
+const VALID_GOAL_FIELDS = new Set<GoalField>(["weight", "waist", "hrv", "rhr"]);
+
+export async function handleGoal(
+  field: string,
+  valueText: string,
+  _todayISO: string,
+): Promise<string> {
+  const f = field.trim().toLowerCase() as GoalField;
+  if (!field.trim() || !VALID_GOAL_FIELDS.has(f)) {
+    return "Usage: /goal <weight|waist|hrv|rhr> <value>\nExamples: /goal weight 75  /goal hrv 50";
+  }
+  const num = parseFloat(valueText.trim());
+  if (isNaN(num) || num <= 0) {
+    return `Usage: /goal ${f} <number>`;
+  }
+  await setGoal(f, num);
+  const units: Record<GoalField, string> = {
+    weight: "kg",
+    waist: "cm",
+    hrv: "ms",
+    rhr: "bpm",
+  };
+  return `🎯 Goal set: ${f} ${num}${units[f]}`;
+}
+
+export async function handleGoals(todayISO: string): Promise<string> {
+  const goals = await listAllGoals();
+
+  // Fetch today's snapshot for current values
+  const snap = (await getBiometricSnapshot(todayISO)) as
+    | import("@/lib/whoop").BiometricSnapshot
+    | null;
+
+  const currentWeight = (() => {
+    // Try to get most recent weight from body measurements (last 30 days)
+    return null; // weight not available from biometric snapshot directly
+  })();
+
+  const currentHrv = snap?.recovery?.hrv_rmssd_ms ?? null;
+  const currentRhr = snap?.recovery?.rhr_bpm ?? null;
+
+  const units: Record<GoalField, string> = {
+    weight: "kg",
+    waist: "cm",
+    hrv: "ms",
+    rhr: "bpm",
+  };
+
+  const lines: string[] = ["🎯 Goals"];
+
+  const fields: GoalField[] = ["weight", "waist", "hrv", "rhr"];
+  for (const f of fields) {
+    const goal = goals[f];
+    if (goal == null) {
+      lines.push(`${f.charAt(0).toUpperCase() + f.slice(1)}: — (no goal set)`);
+      continue;
+    }
+
+    // Determine current value
+    let current: number | null = null;
+    if (f === "hrv") current = currentHrv;
+    else if (f === "rhr") current = currentRhr;
+    // weight and waist: no real-time value from snap; show no current data
+
+    if (current == null) {
+      lines.push(
+        `${f.charAt(0).toUpperCase() + f.slice(1)}: ${goal}${units[f]} (no current data)`,
+      );
+    } else {
+      const delta = goal - current;
+      const sign = delta >= 0 ? "+" : "";
+      // For rhr lower is better; for hrv higher is better
+      const direction =
+        f === "rhr"
+          ? delta < 0
+            ? `${Math.abs(delta).toFixed(0)}bpm to lose`
+            : `${delta.toFixed(0)}bpm above goal`
+          : f === "hrv"
+            ? delta > 0
+              ? `${delta.toFixed(0)}ms to gain`
+              : `${Math.abs(delta).toFixed(0)}ms above goal`
+            : `${sign}${delta.toFixed(1)} to go`;
+      lines.push(
+        `${f.charAt(0).toUpperCase() + f.slice(1)}: ${goal}${units[f]} (today ${current} → ${direction})`,
+      );
+    }
+  }
+
   return lines.join("\n");
 }

@@ -158,6 +158,70 @@ export async function listBodyMeasurements(
   return out;
 }
 
+// ── done entry (RPE / RIR / soreness) ────────────────────────────────────────
+
+export interface DoneEntry {
+  date: string;
+  rpe?: number;
+  rir?: number;
+  soreness?: number;
+  notes?: string;
+  created_at: string;
+}
+
+export async function saveDoneEntry(
+  date: string,
+  entry: Omit<DoneEntry, "date" | "created_at">,
+): Promise<void> {
+  const key = `done:${date}`;
+  const value = JSON.stringify({
+    ...entry,
+    date,
+    created_at: new Date().toISOString(),
+  });
+  await withClient((c) => c.set(key, value, { EX: 365 * 24 * 3600 }));
+}
+
+export async function getDoneEntry(date: string): Promise<DoneEntry | null> {
+  const key = `done:${date}`;
+  const v = await withClient((c) => c.get(key));
+  return v == null ? null : (JSON.parse(v) as DoneEntry);
+}
+
+export async function listDoneEntries(daysBack: number): Promise<DoneEntry[]> {
+  const out: DoneEntry[] = [];
+  for (let i = daysBack - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - i);
+    const date = d.toISOString().slice(0, 10);
+    const e = await getDoneEntry(date);
+    if (e) out.push(e);
+  }
+  return out;
+}
+
+// ── goals ─────────────────────────────────────────────────────────────────────
+
+export type GoalField = "weight" | "waist" | "hrv" | "rhr";
+
+export async function setGoal(field: GoalField, value: number): Promise<void> {
+  await withClient((c) => c.set(`goal:${field}`, String(value)));
+}
+
+export async function getGoal(field: GoalField): Promise<number | null> {
+  const v = await withClient((c) => c.get(`goal:${field}`));
+  return v == null ? null : Number(v);
+}
+
+export async function listAllGoals(): Promise<
+  Record<GoalField, number | null>
+> {
+  const fields: GoalField[] = ["weight", "waist", "hrv", "rhr"];
+  const out: Partial<Record<GoalField, number | null>> = {};
+  for (const f of fields) out[f] = await getGoal(f);
+  return out as Record<GoalField, number | null>;
+}
+
 // ── recovery snapshot ────────────────────────────────────────────────────────
 
 export async function setRecoverySnapshot(

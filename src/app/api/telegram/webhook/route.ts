@@ -19,6 +19,9 @@ import {
   handleBody,
   handleStreak,
   handleCalendar,
+  handleDone,
+  handleGoal,
+  handleGoals,
 } from "@/lib/commands";
 import { sendTelegram } from "@/lib/telegram";
 
@@ -112,6 +115,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     reply = await handleStreak(todayISO);
   } else if (cmd === "/calendar") {
     reply = await handleCalendar();
+  } else if (cmd === "/done") {
+    reply = await handleDone(
+      parts.length > 1 ? normalized.slice("/done ".length) : "",
+      todayISO,
+    );
+  } else if (cmd === "/goal" && arg1) {
+    const rest = parts.slice(2).join(" ");
+    reply = await handleGoal(arg1, rest, todayISO);
+  } else if (cmd === "/goal") {
+    reply = await handleGoal("", "", todayISO);
+  } else if (cmd === "/goals") {
+    reply = await handleGoals(todayISO);
   } else {
     reply = await handleHelp();
   }

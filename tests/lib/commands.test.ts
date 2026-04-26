@@ -15,6 +15,10 @@ import {
   handleWeight,
   handleWaist,
   handleBody,
+  handleDone,
+  parseDoneText,
+  handleGoal,
+  handleGoals,
 } from "../../src/lib/commands";
 import type { BiometricSnapshot } from "../../src/lib/whoop";
 
@@ -28,6 +32,17 @@ vi.mock("@/lib/kv", () => ({
   getBodyMeasurement: vi.fn().mockResolvedValue(null),
   listBodyMeasurements: vi.fn().mockResolvedValue([]),
   isSkipped: vi.fn().mockResolvedValue(false),
+  saveDoneEntry: vi.fn().mockResolvedValue(undefined),
+  getDoneEntry: vi.fn().mockResolvedValue(null),
+  listDoneEntries: vi.fn().mockResolvedValue([]),
+  setGoal: vi.fn().mockResolvedValue(undefined),
+  getGoal: vi.fn().mockResolvedValue(null),
+  listAllGoals: vi.fn().mockResolvedValue({
+    weight: null,
+    waist: null,
+    hrv: null,
+    rhr: null,
+  }),
 }));
 
 import {
@@ -37,6 +52,9 @@ import {
   listBiometricSnapshots,
   setBodyMeasurement,
   listBodyMeasurements,
+  saveDoneEntry,
+  setGoal,
+  listAllGoals,
 } from "@/lib/kv";
 
 const TODAY = "2026-04-26";
@@ -126,9 +144,9 @@ describe("handleSwap", () => {
 // ── new command tests ─────────────────────────────────────────────────────────
 
 describe("handleHelp", () => {
-  it("returns string under 800 chars listing key commands", async () => {
+  it("returns string under 1200 chars listing key commands", async () => {
     const reply = await handleHelp();
-    expect(reply.length).toBeLessThan(800);
+    expect(reply.length).toBeLessThan(1200);
     expect(reply).toContain("/today");
     expect(reply).toContain("/hrv");
     expect(reply).toContain("/report");
@@ -446,5 +464,151 @@ describe("handleBody", () => {
     const reply = await handleBody(30);
     expect(reply).toContain("Weight:");
     expect(reply).toContain("Waist:");
+  });
+});
+
+// ── parseDoneText ─────────────────────────────────────────────────────────────
+
+describe("parseDoneText", () => {
+  it("parses RPE only", () => {
+    const r = parseDoneText("rpe 8");
+    expect(r.rpe).toBe(8);
+    expect(r.rir).toBeUndefined();
+    expect(r.soreness).toBeUndefined();
+    expect(r.notes).toBeUndefined();
+  });
+
+  it("parses RPE, RIR, and soreness together", () => {
+    const r = parseDoneText("rpe 8 rir 2 soreness 5");
+    expect(r.rpe).toBe(8);
+    expect(r.rir).toBe(2);
+    expect(r.soreness).toBe(5);
+    expect(r.notes).toBeUndefined();
+  });
+
+  it("parses notes as everything not matched by keywords", () => {
+    const r = parseDoneText("bench 80x8 RPE 8");
+    expect(r.rpe).toBe(8);
+    expect(r.notes).toContain("bench 80x8");
+  });
+
+  it("is case-insensitive for keywords", () => {
+    const r = parseDoneText("RPE 9 RIR 1 SORENESS 3");
+    expect(r.rpe).toBe(9);
+    expect(r.rir).toBe(1);
+    expect(r.soreness).toBe(3);
+  });
+
+  it("handles decimal values", () => {
+    const r = parseDoneText("rpe 8.5");
+    expect(r.rpe).toBe(8.5);
+  });
+
+  it("returns empty object when nothing parseable", () => {
+    const r = parseDoneText("hello world");
+    expect(r.rpe).toBeUndefined();
+    expect(r.rir).toBeUndefined();
+    expect(r.soreness).toBeUndefined();
+    expect(r.notes).toBe("hello world");
+  });
+});
+
+// ── handleDone ────────────────────────────────────────────────────────────────
+
+describe("handleDone", () => {
+  it("returns usage message on empty text", async () => {
+    const reply = await handleDone("", TODAY);
+    expect(reply).toContain("Usage:");
+    expect(vi.mocked(saveDoneEntry)).not.toHaveBeenCalled();
+  });
+
+  it("logs RPE and returns confirmation", async () => {
+    const reply = await handleDone("rpe 8", TODAY);
+    expect(reply).toContain("RPE 8");
+    expect(vi.mocked(saveDoneEntry)).toHaveBeenCalledWith(TODAY, {
+      rpe: 8,
+    });
+  });
+
+  it("logs all three metrics and free-form notes", async () => {
+    const reply = await handleDone("rpe 8 rir 2 soreness 5 felt strong", TODAY);
+    expect(reply).toContain("RPE 8");
+    expect(reply).toContain("RIR 2");
+    expect(reply).toContain("soreness 5");
+    expect(reply).toContain("felt strong");
+    expect(vi.mocked(saveDoneEntry)).toHaveBeenCalledWith(TODAY, {
+      rpe: 8,
+      rir: 2,
+      soreness: 5,
+      notes: "felt strong",
+    });
+  });
+
+  it("returns error when text has no parseable data", async () => {
+    // Pass whitespace text which fails the trim check
+    const reply = await handleDone("   ", TODAY);
+    expect(reply).toContain("Usage:");
+  });
+});
+
+// ── handleGoal ────────────────────────────────────────────────────────────────
+
+describe("handleGoal", () => {
+  it("sets a valid weight goal and returns confirmation", async () => {
+    const reply = await handleGoal("weight", "75", TODAY);
+    expect(reply).toContain("75kg");
+    expect(vi.mocked(setGoal)).toHaveBeenCalledWith("weight", 75);
+  });
+
+  it("sets an HRV goal with ms unit", async () => {
+    const reply = await handleGoal("hrv", "50", TODAY);
+    expect(reply).toContain("50ms");
+    expect(vi.mocked(setGoal)).toHaveBeenCalledWith("hrv", 50);
+  });
+
+  it("rejects unknown field", async () => {
+    const reply = await handleGoal("bodyfat", "15", TODAY);
+    expect(reply).toContain("Usage:");
+    expect(vi.mocked(setGoal)).not.toHaveBeenCalled();
+  });
+
+  it("rejects non-numeric value", async () => {
+    const reply = await handleGoal("weight", "heavy", TODAY);
+    expect(reply).toContain("Usage:");
+    expect(vi.mocked(setGoal)).not.toHaveBeenCalled();
+  });
+
+  it("rejects zero value", async () => {
+    const reply = await handleGoal("rhr", "0", TODAY);
+    expect(reply).toContain("Usage:");
+    expect(vi.mocked(setGoal)).not.toHaveBeenCalled();
+  });
+});
+
+// ── handleGoals ───────────────────────────────────────────────────────────────
+
+describe("handleGoals", () => {
+  it("shows all goals as unset when none configured", async () => {
+    vi.mocked(listAllGoals).mockResolvedValue({
+      weight: null,
+      waist: null,
+      hrv: null,
+      rhr: null,
+    });
+    const reply = await handleGoals(TODAY);
+    expect(reply).toContain("Goals");
+    expect(reply).toContain("no goal set");
+  });
+
+  it("shows set goals with no current data when snap is missing", async () => {
+    vi.mocked(listAllGoals).mockResolvedValue({
+      weight: 75,
+      waist: 80,
+      hrv: 50,
+      rhr: 50,
+    });
+    const reply = await handleGoals(TODAY);
+    expect(reply).toContain("75kg");
+    expect(reply).toContain("no current data");
   });
 });
