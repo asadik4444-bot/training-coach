@@ -12,6 +12,9 @@ import {
   handleReport,
   handleRecent,
   handleSetup,
+  handleWeight,
+  handleWaist,
+  handleBody,
 } from "../../src/lib/commands";
 import type { BiometricSnapshot } from "../../src/lib/whoop";
 
@@ -21,6 +24,10 @@ vi.mock("@/lib/kv", () => ({
   setSwap: vi.fn().mockResolvedValue(undefined),
   getBiometricSnapshot: vi.fn().mockResolvedValue(null),
   listBiometricSnapshots: vi.fn().mockResolvedValue([]),
+  setBodyMeasurement: vi.fn().mockResolvedValue(undefined),
+  getBodyMeasurement: vi.fn().mockResolvedValue(null),
+  listBodyMeasurements: vi.fn().mockResolvedValue([]),
+  isSkipped: vi.fn().mockResolvedValue(false),
 }));
 
 import {
@@ -28,6 +35,8 @@ import {
   setSkipped,
   setSwap,
   listBiometricSnapshots,
+  setBodyMeasurement,
+  listBodyMeasurements,
 } from "@/lib/kv";
 
 const TODAY = "2026-04-26";
@@ -346,5 +355,96 @@ describe("handleSetup", () => {
     expect(reply).toContain("failed");
 
     fetchSpy.mockRestore();
+  });
+});
+
+// ── /weight ───────────────────────────────────────────────────────────────────
+
+describe("handleWeight", () => {
+  it("logs a valid weight and returns confirmation", async () => {
+    const reply = await handleWeight("79.4", TODAY);
+    expect(reply).toBe(`Logged weight 79.4kg for ${TODAY}.`);
+    expect(vi.mocked(setBodyMeasurement)).toHaveBeenCalledWith(
+      TODAY,
+      "weight",
+      79.4,
+    );
+  });
+
+  it("rejects weight below 30", async () => {
+    const reply = await handleWeight("20", TODAY);
+    expect(reply).toContain("Usage:");
+    expect(vi.mocked(setBodyMeasurement)).not.toHaveBeenCalled();
+  });
+
+  it("rejects non-numeric input", async () => {
+    const reply = await handleWeight("heavy", TODAY);
+    expect(reply).toContain("Usage:");
+    expect(vi.mocked(setBodyMeasurement)).not.toHaveBeenCalled();
+  });
+
+  it("rejects weight above 250", async () => {
+    const reply = await handleWeight("300", TODAY);
+    expect(reply).toContain("Usage:");
+  });
+});
+
+// ── /waist ────────────────────────────────────────────────────────────────────
+
+describe("handleWaist", () => {
+  it("logs a valid waist measurement", async () => {
+    const reply = await handleWaist("84", TODAY);
+    expect(reply).toBe(`Logged waist 84cm for ${TODAY}.`);
+    expect(vi.mocked(setBodyMeasurement)).toHaveBeenCalledWith(
+      TODAY,
+      "waist",
+      84,
+    );
+  });
+
+  it("rejects waist above 200", async () => {
+    const reply = await handleWaist("250", TODAY);
+    expect(reply).toContain("Usage:");
+  });
+});
+
+// ── /body ─────────────────────────────────────────────────────────────────────
+
+describe("handleBody", () => {
+  it("returns no-data message when no measurements logged", async () => {
+    vi.mocked(listBodyMeasurements).mockResolvedValue([]);
+    const reply = await handleBody(30);
+    expect(reply).toContain("No body measurements");
+    expect(reply).toContain("/weight");
+  });
+
+  it("shows weight trend when weight data present", async () => {
+    vi.mocked(listBodyMeasurements).mockImplementation(
+      async (field: "weight" | "waist") => {
+        if (field === "weight") {
+          return [
+            { date: "2026-03-27", value: 80.0 },
+            { date: "2026-04-26", value: 78.5 },
+          ];
+        }
+        return [];
+      },
+    );
+    const reply = await handleBody(30);
+    expect(reply).toContain("Weight:");
+    expect(reply).toContain("78.5kg");
+    expect(reply).toContain("-1.5");
+  });
+
+  it("shows both weight and waist when both logged", async () => {
+    vi.mocked(listBodyMeasurements).mockImplementation(
+      async (field: "weight" | "waist") => {
+        if (field === "weight") return [{ date: "2026-04-26", value: 79.0 }];
+        return [{ date: "2026-04-26", value: 85.0 }];
+      },
+    );
+    const reply = await handleBody(30);
+    expect(reply).toContain("Weight:");
+    expect(reply).toContain("Waist:");
   });
 });

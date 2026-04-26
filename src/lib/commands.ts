@@ -6,6 +6,9 @@ import {
   setSwap,
   getBiometricSnapshot,
   listBiometricSnapshots,
+  setBodyMeasurement,
+  listBodyMeasurements,
+  isSkipped,
 } from "@/lib/kv";
 import { toMetrics, summarize, polarizedAnalysis } from "@/lib/analytics";
 import { computeTrends } from "@/lib/trends";
@@ -52,14 +55,19 @@ export async function handleSwap(
 export async function handleHelp(): Promise<string> {
   return [
     "Commands:",
-    "/today — today's snapshot: recovery, HRV, sleep, workout",
-    "/hrv [N] — HRV trend over N days (default 7)",
-    "/rhr [N] — RHR trend over N days",
+    "/today — snapshot: recovery, HRV, sleep, workout",
+    "/hrv [N] — HRV trend (default 7 days)",
+    "/rhr [N] — RHR trend",
     "/sleep [N] — sleep efficiency + duration trend",
     "/zones [N] — HR zone breakdown + polarized ratio",
     "/load — training load ACWR (7d/28d)",
-    "/report [week|month|year] — full analytics summary",
+    "/report [week|month|year] — analytics summary",
     "/recent [N] — last N workouts (default 5)",
+    "/weight <kg> — log body weight",
+    "/waist <cm> — log waist measurement",
+    "/body [N] — body comp trend (default 30 days)",
+    "/streak — green-recovery + no-skip streaks",
+    "/calendar — 90-day recovery heatmap",
     "/backfill — pull 90 days of history from Whoop",
     "/setup — backfill + onboarding guide",
     "/log <text> — append training note",
@@ -498,4 +506,141 @@ export async function handleSetup(): Promise<string> {
     "  /report month — full monthly summary",
     "  /load — training load ACWR",
   ].join("\n");
+}
+
+// ── /weight ───────────────────────────────────────────────────────────────────
+
+export async function handleWeight(
+  text: string,
+  todayISO: string,
+): Promise<string> {
+  const num = parseFloat(text.trim());
+  if (isNaN(num) || num < 30 || num > 250) {
+    return "Usage: /weight 79.4  (kg, between 30 and 250)";
+  }
+  await setBodyMeasurement(todayISO, "weight", num);
+  return `Logged weight ${num}kg for ${todayISO}.`;
+}
+
+// ── /waist ────────────────────────────────────────────────────────────────────
+
+export async function handleWaist(
+  text: string,
+  todayISO: string,
+): Promise<string> {
+  const num = parseFloat(text.trim());
+  if (isNaN(num) || num < 30 || num > 200) {
+    return "Usage: /waist 84  (cm, between 30 and 200)";
+  }
+  await setBodyMeasurement(todayISO, "waist", num);
+  return `Logged waist ${num}cm for ${todayISO}.`;
+}
+
+// ── /body ─────────────────────────────────────────────────────────────────────
+
+export async function handleBody(daysBack: number): Promise<string> {
+  const weights = await listBodyMeasurements("weight", daysBack);
+  const waists = await listBodyMeasurements("waist", daysBack);
+  if (weights.length === 0 && waists.length === 0) {
+    return `No body measurements logged. Try /weight 79.4 or /waist 84.`;
+  }
+  const lines: string[] = [`📐 Body — last ${daysBack} days`];
+  if (weights.length) {
+    const vals = weights.map((w) => w.value);
+    const first = vals[0];
+    const last = vals[vals.length - 1];
+    const delta = (last - first).toFixed(1);
+    const sign = last >= first ? "+" : "";
+    lines.push(
+      `Weight: ${last}kg (${sign}${delta} over ${weights.length} entries)`,
+    );
+  }
+  if (waists.length) {
+    const vals = waists.map((w) => w.value);
+    const first = vals[0];
+    const last = vals[vals.length - 1];
+    const delta = (last - first).toFixed(1);
+    const sign = last >= first ? "+" : "";
+    lines.push(
+      `Waist: ${last}cm (${sign}${delta} over ${waists.length} entries)`,
+    );
+  }
+  return lines.join("\n");
+}
+
+// ── /streak ───────────────────────────────────────────────────────────────────
+
+export async function handleStreak(todayISO: string): Promise<string> {
+  const { computeStreaks } = await import("@/lib/streak");
+  const snaps = (await listBiometricSnapshots(
+    60,
+  )) as import("@/lib/whoop").BiometricSnapshot[];
+  const skipMap: Record<string, boolean> = {};
+  for (let i = 0; i < 60; i++) {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - i);
+    const date = d.toISOString().slice(0, 10);
+    skipMap[date] = await isSkipped(date);
+  }
+  const s = computeStreaks(snaps, skipMap);
+  return [
+    "🔥 Streaks",
+    `Green recovery: ${s.green_recovery} days (best ${s.best_green_recovery})`,
+    `No-skip workdays: ${s.no_skip}`,
+  ].join("\n");
+}
+
+// ── /calendar ─────────────────────────────────────────────────────────────────
+
+export async function handleCalendar(): Promise<string> {
+  const snaps = (await listBiometricSnapshots(
+    90,
+  )) as import("@/lib/whoop").BiometricSnapshot[];
+  const byDate = new Map<string, import("@/lib/whoop").BiometricSnapshot>();
+  for (const s of snaps) byDate.set(s.date, s);
+
+  const lines: string[] = ["📅 Recovery — last 90 days"];
+  lines.push("Mon Tue Wed Thu Fri Sat Sun");
+
+  const today = new Date();
+  const start = new Date(today);
+  start.setUTCDate(start.getUTCDate() - 90);
+  // Adjust to Monday of that week (0=Sun, 1=Mon, ... 6=Sat)
+  const day = start.getUTCDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  start.setUTCDate(start.getUTCDate() + mondayOffset);
+
+  const cursor = new Date(start);
+  let row = "";
+  let count = 0;
+  while (cursor <= today) {
+    const dateISO = cursor.toISOString().slice(0, 10);
+    const snap = byDate.get(dateISO);
+    let cell: string;
+    if (
+      !snap ||
+      snap.recovery.status !== "scored" ||
+      snap.recovery.score == null
+    ) {
+      cell = "⬜ ";
+    } else if (snap.recovery.score >= 67) {
+      cell = "🟢 ";
+    } else if (snap.recovery.score >= 34) {
+      cell = "🟡 ";
+    } else {
+      cell = "🔴 ";
+    }
+    row += cell;
+    count++;
+    if (count % 7 === 0) {
+      lines.push(row.trimEnd());
+      row = "";
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  if (row) lines.push(row.trimEnd());
+
+  lines.push("");
+  lines.push("🟢 ≥67%  🟡 34-66%  🔴 <34%  ⬜ no data");
+  return lines.join("\n");
 }

@@ -121,6 +121,43 @@ export async function listBiometricSnapshots(
   return out;
 }
 
+// ── body measurements ────────────────────────────────────────────────────────
+
+const ONE_YEAR_SECONDS = 365 * 24 * 3600;
+
+export async function setBodyMeasurement(
+  date: string,
+  field: "weight" | "waist",
+  value: number,
+): Promise<void> {
+  const key = `body:${field}:${date}`;
+  await withClient((c) => c.set(key, String(value), { EX: ONE_YEAR_SECONDS }));
+}
+
+export async function getBodyMeasurement(
+  date: string,
+  field: "weight" | "waist",
+): Promise<number | null> {
+  const key = `body:${field}:${date}`;
+  const v = await withClient((c) => c.get(key));
+  return v == null ? null : Number(v);
+}
+
+export async function listBodyMeasurements(
+  field: "weight" | "waist",
+  daysBack: number,
+): Promise<Array<{ date: string; value: number }>> {
+  const out: Array<{ date: string; value: number }> = [];
+  for (let i = daysBack - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - i);
+    const date = d.toISOString().slice(0, 10);
+    const v = await getBodyMeasurement(date, field);
+    if (v != null) out.push({ date, value: v });
+  }
+  return out;
+}
+
 // ── recovery snapshot ────────────────────────────────────────────────────────
 
 export async function setRecoverySnapshot(
