@@ -71,7 +71,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.asadbek.trainingcoach.widget
         PRODUCT_NAME: TrainingCoachWidget
         APPLICATION_EXTENSION_API_ONLY: YES
-        INFOPLIST_KEY_NSExtension: "{NSExtensionPointIdentifier = \"com.apple.widgetkit-extension\";}"
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Sources/TrainingCoachWidget/Info.plist
     entitlements:
       path: TrainingCoach.xcodeproj/TrainingCoachWidget.entitlements
       properties:
