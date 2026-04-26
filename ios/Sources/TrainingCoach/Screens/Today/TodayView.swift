@@ -12,7 +12,8 @@ struct TodayView: View {
             ScrollView {
                 content
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 18)
+                    .padding(.top, 8)
+                    .padding(.bottom, 96)
             }
             .refreshable {
                 impact()
@@ -21,6 +22,9 @@ struct TodayView: View {
             }
             .background(Color.bg.ignoresSafeArea())
             .navigationTitle("Today")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Color.bg, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
         }
         .background(Color.bg.ignoresSafeArea())
         .task {
