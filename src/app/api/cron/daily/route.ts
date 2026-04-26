@@ -2,10 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { parsePlan, pickToday, daysSinceWeekStart } from "@/lib/plan";
-import { refreshAccessToken, fetchLatestRecovery } from "@/lib/whoop";
+import {
+  refreshAccessToken,
+  fetchLatestRecovery,
+  fetchTodaysBiometrics,
+} from "@/lib/whoop";
 import { composeMessage } from "@/lib/message";
 import { sendTelegram } from "@/lib/telegram";
-import { isSkipped, getSwap, setRecoverySnapshot } from "@/lib/kv";
+import {
+  isSkipped,
+  getSwap,
+  setRecoverySnapshot,
+  setBiometricSnapshot,
+} from "@/lib/kv";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -58,6 +67,15 @@ export async function GET(req: NextRequest) {
     let todayPlan = pickToday(plan, effectiveWeekday);
 
     const accessToken = await refreshAccessToken();
+
+    // Persist full biometric snapshot — best-effort, don't break main flow
+    try {
+      const snapshot = await fetchTodaysBiometrics(accessToken);
+      await setBiometricSnapshot(todayISO, snapshot);
+    } catch {
+      // snapshot persistence is non-critical; continue
+    }
+
     const recovery = await fetchLatestRecovery(accessToken);
 
     let text: string;
