@@ -1,3 +1,24 @@
+# Training Coach — iOS (v9.0)
+
+Native SwiftUI app for the training-coach Vercel backend. **$0/yr** via Apple Free Provisioning + AltStore Classic auto-resigning. iOS 17+. Single-user (Asadbek).
+
+## What's in v9.0
+
+| Tab      | Content                                                                                                                                                                                                      |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Today    | Animated recovery ring (Apple-Watch-grade, spring physics), HRV/RHR/Sleep stats with mono numerics, last workout card, decision card (red-tinted on hard_stop), pain/protein/bedtime row, Share Recap button |
+| Trends   | 4 SwiftUI Charts (HRV/RHR/Sleep/Strain) with 7d/30d/90d/1y segmented picker, tap-callout, mono latest-value headers                                                                                          |
+| Heatmap  | 13-week × 7-day GitHub-style grid (90 days), today highlighted, tappable day-detail sheet (medium/large detents)                                                                                             |
+| Goals    | Read-only placeholder pointing to Telegram bot (native goals deferred to v9.1)                                                                                                                               |
+| Body     | 4 MetricCards (Weight/BodyFat/RHR/Sleep), HealthKit read-only, sparklines + WoW deltas                                                                                                                       |
+| Workouts | NavigationStack list grouped by ISO week, SF-Symbol sport icons, ZoneBars in detail (Z1-Z5 capsules)                                                                                                         |
+| Settings | Account/Data/HealthKit/Integrations/About, sign-out, rotate-secret, force-refresh                                                                                                                            |
+
+**Widgets:** Recovery (Small), Today (Medium), Heatmap (Large mini grid), LockScreen (.accessoryRectangular/Circular/Inline), QuickLog interactive widget (App Intents — Done/Weigh).
+**Live Activity:** Dynamic Island + Lock Screen during workout window.
+**Local notifications:** 08:05 daily nudge, .timeSensitive (Focus-mode bypass).
+**Recap cards:** Spotify-Wrapped-style 9:16 portrait images for week + month, ImageRenderer + ShareLink.
+
 ## What this is
 
 Training Coach iOS is a single-user native iOS app for Asadbek that talks to the existing Vercel backend at `https://training-coach-phi.vercel.app`; distribution stays at $0/yr by using Apple Free Provisioning for device installs plus AltStore Classic for weekly auto-resigning.
