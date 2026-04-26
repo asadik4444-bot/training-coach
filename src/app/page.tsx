@@ -57,10 +57,10 @@ function UnauthorizedView() {
       }}
     >
       <div style={{ fontSize: "3rem" }}>🔒</div>
-      <h1 style={{ margin: 0, fontSize: "1.5rem", color: "#94a3b8" }}>
+      <h1 style={{ margin: 0, fontSize: "1.5rem", color: "var(--text-muted)" }}>
         Access denied
       </h1>
-      <p style={{ margin: 0, color: "#475569", fontSize: "0.875rem" }}>
+      <p style={{ margin: 0, color: "var(--text-dim)", fontSize: "0.875rem" }}>
         Visit /api/auth/dashboard?key=YOUR_SECRET to authenticate
       </p>
     </div>
@@ -79,14 +79,15 @@ function progressBar(current: number, goal: number, segments = 5): string {
 
 function Sparkline({
   values,
-  color = "#4ade80",
+  color = "var(--green)",
   height = 60,
 }: {
   values: number[];
   color?: string;
   height?: number;
 }) {
-  if (values.length < 2) return <span style={{ color: "#475569" }}>—</span>;
+  if (values.length < 2)
+    return <span style={{ color: "var(--text-dim)" }}>—</span>;
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
@@ -162,12 +163,12 @@ function RecoveryHeatmap({
             const y = di * (cellSize + gap);
             const color =
               cell.score == null
-                ? "#1e293b"
+                ? "var(--bg-card)"
                 : cell.score >= 67
-                  ? "#4ade80"
+                  ? "var(--green)"
                   : cell.score >= 34
-                    ? "#facc15"
-                    : "#ef4444";
+                    ? "var(--yellow)"
+                    : "var(--red)";
             return (
               <rect
                 key={`${wi}-${di}`}
@@ -189,17 +190,17 @@ function RecoveryHeatmap({
           gap: "0.75rem",
           marginTop: "0.4rem",
           fontSize: "0.7rem",
-          color: "#64748b",
+          color: "var(--text-dim)",
         }}
       >
         <span>
-          <span style={{ color: "#4ade80" }}>■</span> Green ≥67%
+          <span style={{ color: "var(--green)" }}>■</span> Green ≥67%
         </span>
         <span>
-          <span style={{ color: "#facc15" }}>■</span> Yellow 34–66%
+          <span style={{ color: "var(--yellow)" }}>■</span> Yellow 34–66%
         </span>
         <span>
-          <span style={{ color: "#ef4444" }}>■</span> Red &lt;34%
+          <span style={{ color: "var(--red)" }}>■</span> Red &lt;34%
         </span>
       </div>
     </div>
@@ -218,11 +219,11 @@ function Widget({
   return (
     <div
       style={{
-        background: "#1e293b",
+        background: "var(--bg-card)",
         borderRadius: "12px",
         padding: "1rem 1.25rem",
         marginBottom: "0.75rem",
-        border: "1px solid #334155",
+        border: "1px solid var(--border)",
       }}
     >
       <div
@@ -230,7 +231,7 @@ function Widget({
           fontSize: "0.7rem",
           textTransform: "uppercase",
           letterSpacing: "0.08em",
-          color: "#64748b",
+          color: "var(--text-dim)",
           marginBottom: "0.5rem",
           fontWeight: 600,
         }}
@@ -262,11 +263,15 @@ function StatRow({
         padding: "0.15rem 0",
       }}
     >
-      <span style={{ color: "#94a3b8", fontSize: "0.875rem" }}>{label}</span>
+      <span style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>
+        {label}
+      </span>
       <span style={{ display: "flex", gap: "0.5rem", alignItems: "baseline" }}>
         <span style={{ fontWeight: 600, fontSize: "0.875rem" }}>{value}</span>
         {delta && (
-          <span style={{ fontSize: "0.75rem", color: "#64748b" }}>{delta}</span>
+          <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>
+            {delta}
+          </span>
         )}
       </span>
     </div>
@@ -286,7 +291,11 @@ function wowDelta(
   const arrow = diff > 0 ? "↑" : diff < 0 ? "↓" : "→";
   const sign = diff > 0 ? "+" : "";
   const good = higherIsBetter ? diff > 0 : diff < 0;
-  const color = good ? "#4ade80" : diff === 0 ? "#94a3b8" : "#f87171";
+  const color = good
+    ? "var(--green)"
+    : diff === 0
+      ? "var(--text-muted)"
+      : "var(--red)";
   return `<span style="color:${color}">${arrow} ${sign}${pct.toFixed(1)}%</span>`;
 }
 
@@ -390,11 +399,11 @@ export default async function Page({ searchParams }: Props) {
   const recColor =
     recScore != null
       ? recScore >= 67
-        ? "#4ade80"
+        ? "var(--green)"
         : recScore >= 34
-          ? "#facc15"
-          : "#ef4444"
-      : "#94a3b8";
+          ? "var(--yellow)"
+          : "var(--red)"
+      : "var(--text-muted)";
 
   // Coach voice opener
   const coachOpener = opener(recBand);
@@ -520,20 +529,7 @@ export default async function Page({ searchParams }: Props) {
 
   return (
     <>
-      <style>{`
-        * { box-sizing: border-box; }
-        body {
-          margin: 0;
-          background: #0f172a;
-          color: #e2e8f0;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-          -webkit-font-smoothing: antialiased;
-        }
-        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-        @media (max-width: 480px) { .two-col { grid-template-columns: 1fr; } }
-        a { color: inherit; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-      `}</style>
+      {/* page-level style block removed — global tokens are in layout.tsx */}
 
       <div
         style={{
@@ -557,12 +553,12 @@ export default async function Page({ searchParams }: Props) {
               fontSize: "1.1rem",
               fontWeight: 700,
               letterSpacing: "0.05em",
-              color: "#f1f5f9",
+              color: "var(--text)",
             }}
           >
             TRAINING COACH
           </h1>
-          <span style={{ color: "#475569", fontSize: "0.75rem" }}>
+          <span style={{ color: "var(--text-dim)", fontSize: "0.75rem" }}>
             {todayISO}
           </span>
         </div>
@@ -570,7 +566,8 @@ export default async function Page({ searchParams }: Props) {
         {/* TODAY hero */}
         <div
           style={{
-            background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
+            background:
+              "linear-gradient(135deg, var(--bg-card) 0%, var(--bg) 100%)",
             borderRadius: "16px",
             padding: "1.25rem 1.5rem",
             marginBottom: "0.75rem",
@@ -583,7 +580,7 @@ export default async function Page({ searchParams }: Props) {
               fontSize: "0.7rem",
               textTransform: "uppercase",
               letterSpacing: "0.08em",
-              color: "#64748b",
+              color: "var(--text-dim)",
               marginBottom: "0.6rem",
               fontWeight: 600,
             }}
@@ -591,15 +588,15 @@ export default async function Page({ searchParams }: Props) {
             TODAY
           </div>
 
-          {/* Recovery score — big */}
+          {/* Recovery score — big, with glow */}
           <div
+            className="mono metric-glow"
             style={{
               fontSize: "3rem",
-              fontWeight: 800,
+              fontWeight: 700,
               color: recColor,
               lineHeight: 1,
               marginBottom: "0.25rem",
-              fontVariantNumeric: "tabular-nums",
             }}
           >
             {recStr}
@@ -609,7 +606,7 @@ export default async function Page({ searchParams }: Props) {
           <div
             style={{
               fontSize: "0.9rem",
-              color: "#94a3b8",
+              color: "var(--text-muted)",
               fontStyle: "italic",
               marginBottom: "0.75rem",
               lineHeight: 1.4,
@@ -624,20 +621,20 @@ export default async function Page({ searchParams }: Props) {
               display: "flex",
               gap: "1rem",
               fontSize: "0.8rem",
-              color: "#94a3b8",
+              color: "var(--text-muted)",
               marginBottom: todayPlan ? "0.75rem" : "0",
               flexWrap: "wrap",
             }}
           >
             <span>
-              HRV <strong style={{ color: "#cbd5e1" }}>{hrvStr}</strong>
+              HRV <strong style={{ color: "var(--text)" }}>{hrvStr}</strong>
             </span>
             <span>
-              RHR <strong style={{ color: "#cbd5e1" }}>{rhrStr}</strong>
+              RHR <strong style={{ color: "var(--text)" }}>{rhrStr}</strong>
             </span>
             <span>
               Sleep{" "}
-              <strong style={{ color: "#cbd5e1" }}>
+              <strong style={{ color: "var(--text)" }}>
                 {sleepEffStr}
                 {sleepDurStr}
               </strong>
@@ -648,11 +645,11 @@ export default async function Page({ searchParams }: Props) {
           {todayPlan && (
             <div
               style={{
-                background: "#0f172a",
+                background: "var(--bg)",
                 borderRadius: "8px",
                 padding: "0.5rem 0.75rem",
                 fontSize: "0.8rem",
-                color: "#cbd5e1",
+                color: "var(--text)",
                 borderLeft: `3px solid ${recColor}`,
               }}
             >
@@ -667,27 +664,29 @@ export default async function Page({ searchParams }: Props) {
             display: "flex",
             gap: "1.5rem",
             padding: "0.6rem 1rem",
-            background: "#1e293b",
+            background: "var(--bg-surface)",
             borderRadius: "10px",
             marginBottom: "0.75rem",
             fontSize: "0.8rem",
-            color: "#94a3b8",
+            color: "var(--text-muted)",
             border: "1px solid #334155",
           }}
         >
           <span>
             Green streak{" "}
-            <strong style={{ color: "#4ade80" }}>
+            <strong style={{ color: "var(--green)" }}>
               {streaks.green_recovery}d
             </strong>
           </span>
           <span>
             No-skip{" "}
-            <strong style={{ color: "#4ade80" }}>{streaks.no_skip}d</strong>
+            <strong style={{ color: "var(--green)" }}>
+              {streaks.no_skip}d
+            </strong>
           </span>
           <span>
             Best{" "}
-            <strong style={{ color: "#94a3b8" }}>
+            <strong style={{ color: "var(--text-muted)" }}>
               {streaks.best_green_recovery}d
             </strong>
           </span>
@@ -703,14 +702,14 @@ export default async function Page({ searchParams }: Props) {
 
             {/* HRV sparkline */}
             <Widget title={`HRV — last ${snaps30.length} days`}>
-              <Sparkline values={hrvValues} color="#4ade80" />
+              <Sparkline values={hrvValues} color="var(--green)" />
               <div
                 style={{
                   display: "flex",
                   gap: "1rem",
                   marginTop: "0.4rem",
                   fontSize: "0.8rem",
-                  color: "#94a3b8",
+                  color: "var(--text-muted)",
                   flexWrap: "wrap",
                 }}
               >
@@ -728,11 +727,11 @@ export default async function Page({ searchParams }: Props) {
             {/* RHR sparkline */}
             {rhrValues.length >= 2 && (
               <Widget title={`RHR — last ${snaps30.length} days`}>
-                <Sparkline values={rhrValues} color="#f87171" />
+                <Sparkline values={rhrValues} color="var(--red)" />
                 <div
                   style={{
                     fontSize: "0.8rem",
-                    color: "#94a3b8",
+                    color: "var(--text-muted)",
                     marginTop: "0.4rem",
                   }}
                 >
@@ -748,11 +747,11 @@ export default async function Page({ searchParams }: Props) {
             {/* Sleep efficiency sparkline */}
             {sleepValues.length >= 2 && (
               <Widget title={`Sleep efficiency — last ${snaps30.length} days`}>
-                <Sparkline values={sleepValues} color="#818cf8" />
+                <Sparkline values={sleepValues} color="var(--primary-light)" />
                 <div
                   style={{
                     fontSize: "0.8rem",
-                    color: "#94a3b8",
+                    color: "var(--text-muted)",
                     marginTop: "0.4rem",
                   }}
                 >
@@ -775,28 +774,32 @@ export default async function Page({ searchParams }: Props) {
                   fontSize: "0.8rem",
                 }}
               >
-                <span style={{ color: "#475569", fontSize: "0.7rem" }}>
+                <span style={{ color: "var(--text-dim)", fontSize: "0.7rem" }}>
                   Metric
                 </span>
-                <span style={{ color: "#475569", fontSize: "0.7rem" }}>
+                <span style={{ color: "var(--text-dim)", fontSize: "0.7rem" }}>
                   This wk
                 </span>
-                <span style={{ color: "#475569", fontSize: "0.7rem" }}>
+                <span style={{ color: "var(--text-dim)", fontSize: "0.7rem" }}>
                   Last wk
                 </span>
 
-                <span style={{ color: "#94a3b8" }}>HRV</span>
+                <span style={{ color: "var(--text-muted)" }}>HRV</span>
                 <span style={{ fontWeight: 600 }}>
                   {wow.hrv_this != null ? `${wow.hrv_this.toFixed(1)}ms` : "—"}
                 </span>
-                <span style={{ color: "#64748b" }}>
+                <span style={{ color: "var(--text-dim)" }}>
                   {wow.hrv_prev != null ? `${wow.hrv_prev.toFixed(1)}ms` : "—"}
                   {wow.hrv_this != null && wow.hrv_prev != null
                     ? (() => {
                         const d = wow.hrv_this - wow.hrv_prev;
                         const good = d > 0;
                         const col =
-                          d > 0 ? "#4ade80" : d < 0 ? "#f87171" : "#94a3b8";
+                          d > 0
+                            ? "var(--green)"
+                            : d < 0
+                              ? "var(--red)"
+                              : "var(--text-muted)";
                         return (
                           <span style={{ color: col, marginLeft: "0.25rem" }}>
                             {d > 0 ? "↑" : d < 0 ? "↓" : "→"}
@@ -806,17 +809,21 @@ export default async function Page({ searchParams }: Props) {
                     : null}
                 </span>
 
-                <span style={{ color: "#94a3b8" }}>RHR</span>
+                <span style={{ color: "var(--text-muted)" }}>RHR</span>
                 <span style={{ fontWeight: 600 }}>
                   {wow.rhr_this != null ? `${wow.rhr_this.toFixed(1)}bpm` : "—"}
                 </span>
-                <span style={{ color: "#64748b" }}>
+                <span style={{ color: "var(--text-dim)" }}>
                   {wow.rhr_prev != null ? `${wow.rhr_prev.toFixed(1)}bpm` : "—"}
                   {wow.rhr_this != null && wow.rhr_prev != null
                     ? (() => {
                         const d = wow.rhr_this - wow.rhr_prev;
                         const col =
-                          d < 0 ? "#4ade80" : d > 0 ? "#f87171" : "#94a3b8";
+                          d < 0
+                            ? "var(--green)"
+                            : d > 0
+                              ? "var(--red)"
+                              : "var(--text-muted)";
                         return (
                           <span style={{ color: col, marginLeft: "0.25rem" }}>
                             {d < 0 ? "↑" : d > 0 ? "↓" : "→"}
@@ -826,13 +833,13 @@ export default async function Page({ searchParams }: Props) {
                     : null}
                 </span>
 
-                <span style={{ color: "#94a3b8" }}>Sleep</span>
+                <span style={{ color: "var(--text-muted)" }}>Sleep</span>
                 <span style={{ fontWeight: 600 }}>
                   {wow.sleep_this != null
                     ? `${wow.sleep_this.toFixed(1)}%`
                     : "—"}
                 </span>
-                <span style={{ color: "#64748b" }}>
+                <span style={{ color: "var(--text-dim)" }}>
                   {wow.sleep_prev != null
                     ? `${wow.sleep_prev.toFixed(1)}%`
                     : "—"}
@@ -840,7 +847,11 @@ export default async function Page({ searchParams }: Props) {
                     ? (() => {
                         const d = wow.sleep_this - wow.sleep_prev;
                         const col =
-                          d > 0 ? "#4ade80" : d < 0 ? "#f87171" : "#94a3b8";
+                          d > 0
+                            ? "var(--green)"
+                            : d < 0
+                              ? "var(--red)"
+                              : "var(--text-muted)";
                         return (
                           <span style={{ color: col, marginLeft: "0.25rem" }}>
                             {d > 0 ? "↑" : d < 0 ? "↓" : "→"}
@@ -850,11 +861,11 @@ export default async function Page({ searchParams }: Props) {
                     : null}
                 </span>
 
-                <span style={{ color: "#94a3b8" }}>Strain</span>
+                <span style={{ color: "var(--text-muted)" }}>Strain</span>
                 <span style={{ fontWeight: 600 }}>
                   {wow.strain_this != null ? wow.strain_this.toFixed(1) : "—"}
                 </span>
-                <span style={{ color: "#64748b" }}>
+                <span style={{ color: "var(--text-dim)" }}>
                   {wow.strain_prev != null ? wow.strain_prev.toFixed(1) : "—"}
                 </span>
               </div>
@@ -904,7 +915,7 @@ export default async function Page({ searchParams }: Props) {
                     >
                       <span
                         style={{
-                          color: "#94a3b8",
+                          color: "var(--text-muted)",
                           textTransform: "uppercase",
                           fontSize: "0.75rem",
                         }}
@@ -913,14 +924,19 @@ export default async function Page({ searchParams }: Props) {
                       </span>
                       <span
                         style={{
-                          color: "#4ade80",
+                          color: "var(--green)",
                           fontFamily: "monospace",
                           letterSpacing: "0.05em",
                         }}
                       >
                         {bar}
                       </span>
-                      <span style={{ color: "#64748b", fontSize: "0.75rem" }}>
+                      <span
+                        style={{
+                          color: "var(--text-dim)",
+                          fontSize: "0.75rem",
+                        }}
+                      >
                         {currentVal.toFixed(field === "hrv" ? 0 : 1)}
                         {unit} → {goalVal}
                         {unit}
@@ -940,7 +956,7 @@ export default async function Page({ searchParams }: Props) {
                   >
                     <span
                       style={{
-                        color: "#94a3b8",
+                        color: "var(--text-muted)",
                         textTransform: "uppercase",
                         fontSize: "0.75rem",
                       }}
@@ -949,14 +965,16 @@ export default async function Page({ searchParams }: Props) {
                     </span>
                     <span
                       style={{
-                        color: "#4ade80",
+                        color: "var(--green)",
                         fontFamily: "monospace",
                         letterSpacing: "0.05em",
                       }}
                     >
                       {progressBar(proteinHits, proteinHistory.length, 7)}
                     </span>
-                    <span style={{ color: "#64748b", fontSize: "0.75rem" }}>
+                    <span
+                      style={{ color: "var(--text-dim)", fontSize: "0.75rem" }}
+                    >
                       {proteinHits}/{proteinHistory.length} days
                     </span>
                   </div>
@@ -1048,16 +1066,16 @@ export default async function Page({ searchParams }: Props) {
                     >
                       <span
                         style={{
-                          color: "#475569",
+                          color: "var(--text-dim)",
                           fontVariantNumeric: "tabular-nums",
                         }}
                       >
                         {s.date.slice(5)}
                       </span>
-                      <span style={{ color: "#cbd5e1" }}>{w.sport}</span>
+                      <span style={{ color: "var(--text)" }}>{w.sport}</span>
                       <span
                         style={{
-                          color: "#64748b",
+                          color: "var(--text-dim)",
                           textAlign: "right",
                           fontVariantNumeric: "tabular-nums",
                         }}
@@ -1076,17 +1094,17 @@ export default async function Page({ searchParams }: Props) {
         <div
           style={{
             textAlign: "center",
-            color: "#475569",
+            color: "var(--text-dim)",
             fontSize: "0.75rem",
             paddingTop: "0.5rem",
           }}
         >
           {showDetail ? (
-            <a href="?" style={{ color: "#64748b" }}>
+            <a href="?" style={{ color: "var(--text-dim)" }}>
               ← hero only
             </a>
           ) : (
-            <a href="?detail=1" style={{ color: "#64748b" }}>
+            <a href="?detail=1" style={{ color: "var(--text-dim)" }}>
               + full detail
             </a>
           )}
@@ -1095,13 +1113,13 @@ export default async function Page({ searchParams }: Props) {
         <div
           style={{
             textAlign: "center",
-            color: "#334155",
+            color: "var(--border)",
             fontSize: "0.7rem",
             paddingTop: "0.5rem",
             paddingBottom: "1.5rem",
           }}
         >
-          training-coach v7
+          training-coach v8
         </div>
       </div>
     </>

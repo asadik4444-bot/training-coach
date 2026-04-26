@@ -5,6 +5,80 @@ export const metadata = {
   description: "Personal training coach with HRV-aware AI",
 };
 
+// ── OLED design token CSS (injected via <style> — no Tailwind v4 needed) ────
+// Tailwind v4 is CSS-first; given the existing inline-style pattern and
+// <30 kb bundle target, CSS custom properties on :root are cleaner here.
+const globalCSS = `
+  *, *::before, *::after { box-sizing: border-box; }
+
+  :root {
+    /* Backgrounds */
+    --bg:          #0A0A0F;
+    --bg-surface:  #11121A;
+    --bg-card:     #161824;
+
+    /* Borders */
+    --border:      #1F2937;
+    --border-muted:#0F1018;
+
+    /* Text */
+    --text:        #F8FAFC;
+    --text-muted:  #94A3B8;
+    --text-dim:    #64748B;
+
+    /* Brand */
+    --primary:     #1E40AF;
+    --primary-light:#3B82F6;
+    --accent:      #D97706;
+
+    /* Recovery bands */
+    --green:       #22C55E;
+    --yellow:      #EAB308;
+    --red:         #EF4444;
+
+    /* Typography */
+    --font-sans:   "Fira Sans", system-ui, sans-serif;
+    --font-mono:   "Fira Code", monospace;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Safe-area insets for iPhone notch / home bar */
+  .safe-top    { padding-top:    env(safe-area-inset-top); }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+  /* Utility for hardware-accelerated transitions */
+  .transition-fast { transition: all 150ms ease-out; }
+  .transition-med  { transition: all 280ms ease-out; }
+
+  /* Respect reduced-motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+
+  /* Two-column responsive grid (used in streaks/body side-by-side) */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  @media (max-width: 480px) { .two-col { grid-template-columns: 1fr; } }
+
+  a { color: inherit; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Monospace numerics */
+  .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+  /* Glow effect for hero metric numbers */
+  .metric-glow { text-shadow: 0 0 10px currentColor; }
+`;
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
@@ -42,18 +116,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           rel="stylesheet"
         />
       </head>
-      <body
-        style={{
-          margin: 0,
-          padding: 0,
-          fontFamily: '"Fira Sans", system-ui, sans-serif',
-          background: "#0A0A0F",
-          color: "#F8FAFC",
-          minHeight: "100vh",
-          WebkitFontSmoothing: "antialiased",
-          MozOsxFontSmoothing: "grayscale",
-        }}
-      >
+      <body>
+        <style dangerouslySetInnerHTML={{ __html: globalCSS }} />
         {children}
       </body>
     </html>
