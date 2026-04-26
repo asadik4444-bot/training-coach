@@ -16,6 +16,7 @@ import { cookies } from "next/headers";
 import { opener } from "@/lib/voice";
 import { classifyRecovery } from "@/lib/recovery";
 import StickyToday from "@/components/StickyToday";
+import Heatmap from "@/components/Heatmap";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -117,94 +118,6 @@ function Sparkline({
         strokeLinecap="round"
       />
     </svg>
-  );
-}
-
-// ── 90-day heatmap ────────────────────────────────────────────────────────────
-
-function RecoveryHeatmap({
-  scores,
-}: {
-  scores: Array<{ date: string; score: number | null }>;
-}) {
-  // Build 13 columns × 7 rows grid (Sun–Sat), most-recent column on the right
-  // Pad start so the first cell is Sunday
-  const firstDate = scores.length > 0 ? scores[0].date : null;
-  const startDow = firstDate
-    ? new Date(firstDate + "T12:00:00Z").getUTCDay()
-    : 0;
-
-  const cells: Array<{ date: string; score: number | null } | null> = [
-    ...Array(startDow).fill(null),
-    ...scores,
-  ];
-
-  // Pad to multiple of 7
-  while (cells.length % 7 !== 0) cells.push(null);
-
-  const weeks: Array<Array<{ date: string; score: number | null } | null>> = [];
-  for (let i = 0; i < cells.length; i += 7) {
-    weeks.push(cells.slice(i, i + 7));
-  }
-
-  const cellSize = 14;
-  const gap = 2;
-  const cols = weeks.length;
-  const rows = 7;
-  const svgW = cols * (cellSize + gap) - gap;
-  const svgH = rows * (cellSize + gap) - gap;
-
-  return (
-    <div>
-      <svg width="100%" viewBox={`0 0 ${svgW} ${svgH}`}>
-        {weeks.map((week, wi) =>
-          week.map((cell, di) => {
-            if (!cell) return null;
-            const x = wi * (cellSize + gap);
-            const y = di * (cellSize + gap);
-            const color =
-              cell.score == null
-                ? "var(--bg-card)"
-                : cell.score >= 67
-                  ? "var(--green)"
-                  : cell.score >= 34
-                    ? "var(--yellow)"
-                    : "var(--red)";
-            return (
-              <rect
-                key={`${wi}-${di}`}
-                x={x}
-                y={y}
-                width={cellSize}
-                height={cellSize}
-                rx="2"
-                fill={color}
-                opacity={cell.score == null ? 0.3 : 0.85}
-              />
-            );
-          }),
-        )}
-      </svg>
-      <div
-        style={{
-          display: "flex",
-          gap: "0.75rem",
-          marginTop: "0.4rem",
-          fontSize: "0.7rem",
-          color: "var(--text-dim)",
-        }}
-      >
-        <span>
-          <span style={{ color: "var(--green)" }}>■</span> Green ≥67%
-        </span>
-        <span>
-          <span style={{ color: "var(--yellow)" }}>■</span> Yellow 34–66%
-        </span>
-        <span>
-          <span style={{ color: "var(--red)" }}>■</span> Red &lt;34%
-        </span>
-      </div>
-    </div>
   );
 }
 
@@ -310,33 +223,33 @@ export default async function Page({ searchParams }: Props) {
   const showDetail = detail === "1";
 
   // ── Data fetching ──────────────────────────────────────────────────────────
-  const dataFetches: Promise<unknown>[] = [
+  // snaps91 (for heatmap) and goals/protein are always fetched so the heatmap
+  // is interactive on the main view without requiring ?detail=1.
+  const [
+    snaps30,
+    snaps60,
+    weightHistory,
+    waistHistory,
+    snaps91,
+    goals,
+    proteinHistory,
+  ] = (await Promise.all([
     listBiometricSnapshots(30),
     listBiometricSnapshots(60),
     listBodyMeasurements("weight", 30),
     listBodyMeasurements("waist", 30),
+    listBiometricSnapshots(91),
+    listAllGoals(),
+    listProtein(7),
+  ])) as [
+    BiometricSnapshot[],
+    BiometricSnapshot[],
+    Array<{ date: string; value: number }>,
+    Array<{ date: string; value: number }>,
+    BiometricSnapshot[],
+    Awaited<ReturnType<typeof listAllGoals>>,
+    Array<{ date: string; hit: boolean }>,
   ];
-
-  if (showDetail) {
-    dataFetches.push(
-      listBiometricSnapshots(90),
-      listAllGoals(),
-      listProtein(7),
-    );
-  }
-
-  const results = await Promise.all(dataFetches);
-  const snaps30 = results[0] as BiometricSnapshot[];
-  const snaps60 = results[1] as BiometricSnapshot[];
-  const weightHistory = results[2] as Array<{ date: string; value: number }>;
-  const waistHistory = results[3] as Array<{ date: string; value: number }>;
-  const snaps90 = showDetail ? (results[4] as BiometricSnapshot[]) : [];
-  const goals = showDetail
-    ? (results[5] as Awaited<ReturnType<typeof listAllGoals>>)
-    : null;
-  const proteinHistory = showDetail
-    ? (results[6] as Array<{ date: string; hit: boolean }>)
-    : [];
 
   const trends = computeTrends(snaps30);
   const metrics = toMetrics(snaps30);
@@ -450,9 +363,9 @@ export default async function Page({ searchParams }: Props) {
     .filter((s) => s.sleep != null)
     .map((s) => s.sleep!.efficiency_pct);
 
-  // 90-day heatmap data
+  // 91-day heatmap data (13 weeks × 7 days)
   const heatmapScores: Array<{ date: string; score: number | null }> =
-    snaps90.map((s) => ({
+    snaps91.map((s) => ({
       date: s.date,
       score:
         s.recovery.status === "scored" && s.recovery.score != null
@@ -715,14 +628,14 @@ export default async function Page({ searchParams }: Props) {
           </span>
         </div>
 
+        {/* 13-week tappable recovery heatmap — always visible */}
+        <Widget title="Recovery heatmap — 13 weeks">
+          <Heatmap scores={heatmapScores} todayISO={todayISO} />
+        </Widget>
+
         {/* Detail sections — shown only with ?detail=1 */}
         {showDetail && (
           <>
-            {/* 90-day recovery heatmap */}
-            <Widget title={`Recovery heatmap — 90 days`}>
-              <RecoveryHeatmap scores={heatmapScores} />
-            </Widget>
-
             {/* HRV sparkline */}
             <Widget title={`HRV — last ${snaps30.length} days`}>
               <Sparkline values={hrvValues} color="var(--green)" />
