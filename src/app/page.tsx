@@ -80,50 +80,6 @@ function progressBar(current: number, goal: number, segments = 5): string {
   return "▰".repeat(filled) + "▱".repeat(segments - filled);
 }
 
-// ── SVG Sparkline ─────────────────────────────────────────────────────────────
-
-function Sparkline({
-  values,
-  color = "var(--green)",
-  height = 60,
-}: {
-  values: number[];
-  color?: string;
-  height?: number;
-}) {
-  if (values.length < 2)
-    return <span style={{ color: "var(--text-dim)" }}>—</span>;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const w = 280;
-  const h = height;
-  const points = values
-    .map((v, i) => {
-      const x = (i / (values.length - 1)) * w;
-      const y = h - ((v - min) / range) * (h - 6) - 3;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
-  return (
-    <svg
-      width="100%"
-      height={h}
-      viewBox={`0 0 ${w} ${h}`}
-      preserveAspectRatio="none"
-    >
-      <polyline
-        points={points}
-        fill="none"
-        stroke={color}
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
 // ── Widget wrapper ────────────────────────────────────────────────────────────
 
 function Widget({
@@ -193,27 +149,6 @@ function StatRow({
       </span>
     </div>
   );
-}
-
-// ── Week-over-week comparison helpers ─────────────────────────────────────────
-
-function wowDelta(
-  curr: number | null,
-  prev: number | null,
-  higherIsBetter: boolean,
-): string {
-  if (curr == null || prev == null || prev === 0) return "";
-  const diff = curr - prev;
-  const pct = (diff / prev) * 100;
-  const arrow = diff > 0 ? "↑" : diff < 0 ? "↓" : "→";
-  const sign = diff > 0 ? "+" : "";
-  const good = higherIsBetter ? diff > 0 : diff < 0;
-  const color = good
-    ? "var(--green)"
-    : diff === 0
-      ? "var(--text-muted)"
-      : "var(--red)";
-  return `<span style="color:${color}">${arrow} ${sign}${pct.toFixed(1)}%</span>`;
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
@@ -358,16 +293,6 @@ export default async function Page({ searchParams }: Props) {
       (hrvValues.length - 1);
     hrvCv = (Math.sqrt(variance) / hrvAvg) * 100;
   }
-
-  // RHR sparkline values
-  const rhrValues = snaps30
-    .filter((s) => typeof s.recovery.rhr_bpm === "number")
-    .map((s) => s.recovery.rhr_bpm as number);
-
-  // Sleep efficiency sparkline values
-  const sleepValues = snaps30
-    .filter((s) => s.sleep != null)
-    .map((s) => s.sleep!.efficiency_pct);
 
   // 91-day heatmap data (13 weeks × 7 days)
   const heatmapScores: Array<{ date: string; score: number | null }> =
@@ -889,93 +814,95 @@ export default async function Page({ searchParams }: Props) {
                   This wk
                 </span>
                 <span style={{ color: "var(--text-dim)", fontSize: "0.7rem" }}>
-                  Last wk
+                  vs last wk
                 </span>
 
-                <span style={{ color: "var(--text-muted)" }}>HRV</span>
-                <span style={{ fontWeight: 600 }}>
-                  {wow.hrv_this != null ? `${wow.hrv_this.toFixed(1)}ms` : "—"}
-                </span>
-                <span style={{ color: "var(--text-dim)" }}>
-                  {wow.hrv_prev != null ? `${wow.hrv_prev.toFixed(1)}ms` : "—"}
-                  {wow.hrv_this != null && wow.hrv_prev != null
-                    ? (() => {
-                        const d = wow.hrv_this - wow.hrv_prev;
-                        const good = d > 0;
-                        const col =
-                          d > 0
-                            ? "var(--green)"
-                            : d < 0
-                              ? "var(--red)"
-                              : "var(--text-muted)";
-                        return (
-                          <span style={{ color: col, marginLeft: "0.25rem" }}>
-                            {d > 0 ? "↑" : d < 0 ? "↓" : "→"}
-                          </span>
-                        );
-                      })()
-                    : null}
-                </span>
-
-                <span style={{ color: "var(--text-muted)" }}>RHR</span>
-                <span style={{ fontWeight: 600 }}>
-                  {wow.rhr_this != null ? `${wow.rhr_this.toFixed(1)}bpm` : "—"}
-                </span>
-                <span style={{ color: "var(--text-dim)" }}>
-                  {wow.rhr_prev != null ? `${wow.rhr_prev.toFixed(1)}bpm` : "—"}
-                  {wow.rhr_this != null && wow.rhr_prev != null
-                    ? (() => {
-                        const d = wow.rhr_this - wow.rhr_prev;
-                        const col =
-                          d < 0
-                            ? "var(--green)"
-                            : d > 0
-                              ? "var(--red)"
-                              : "var(--text-muted)";
-                        return (
-                          <span style={{ color: col, marginLeft: "0.25rem" }}>
-                            {d < 0 ? "↑" : d > 0 ? "↓" : "→"}
-                          </span>
-                        );
-                      })()
-                    : null}
-                </span>
-
-                <span style={{ color: "var(--text-muted)" }}>Sleep</span>
-                <span style={{ fontWeight: 600 }}>
-                  {wow.sleep_this != null
-                    ? `${wow.sleep_this.toFixed(1)}%`
-                    : "—"}
-                </span>
-                <span style={{ color: "var(--text-dim)" }}>
-                  {wow.sleep_prev != null
-                    ? `${wow.sleep_prev.toFixed(1)}%`
-                    : "—"}
-                  {wow.sleep_this != null && wow.sleep_prev != null
-                    ? (() => {
-                        const d = wow.sleep_this - wow.sleep_prev;
-                        const col =
-                          d > 0
-                            ? "var(--green)"
-                            : d < 0
-                              ? "var(--red)"
-                              : "var(--text-muted)";
-                        return (
-                          <span style={{ color: col, marginLeft: "0.25rem" }}>
-                            {d > 0 ? "↑" : d < 0 ? "↓" : "→"}
-                          </span>
-                        );
-                      })()
-                    : null}
-                </span>
-
-                <span style={{ color: "var(--text-muted)" }}>Strain</span>
-                <span style={{ fontWeight: 600 }}>
-                  {wow.strain_this != null ? wow.strain_this.toFixed(1) : "—"}
-                </span>
-                <span style={{ color: "var(--text-dim)" }}>
-                  {wow.strain_prev != null ? wow.strain_prev.toFixed(1) : "—"}
-                </span>
+                {(
+                  [
+                    {
+                      label: "HRV",
+                      curr: wow.hrv_this,
+                      prev: wow.hrv_prev,
+                      fmt: (v: number) => `${v.toFixed(1)}ms`,
+                      higherIsBetter: true,
+                    },
+                    {
+                      label: "RHR",
+                      curr: wow.rhr_this,
+                      prev: wow.rhr_prev,
+                      fmt: (v: number) => `${v.toFixed(1)}bpm`,
+                      higherIsBetter: false,
+                    },
+                    {
+                      label: "Sleep",
+                      curr: wow.sleep_this,
+                      prev: wow.sleep_prev,
+                      fmt: (v: number) => `${v.toFixed(1)}%`,
+                      higherIsBetter: true,
+                    },
+                    {
+                      label: "Strain",
+                      curr: wow.strain_this,
+                      prev: wow.strain_prev,
+                      fmt: (v: number) => v.toFixed(1),
+                      higherIsBetter: true,
+                    },
+                  ] as {
+                    label: string;
+                    curr: number | null;
+                    prev: number | null;
+                    fmt: (v: number) => string;
+                    higherIsBetter: boolean;
+                  }[]
+                ).map(({ label, curr, prev, fmt, higherIsBetter }) => {
+                  const d = curr != null && prev != null ? curr - prev : null;
+                  const pct =
+                    d != null && prev != null && prev !== 0
+                      ? (d / prev) * 100
+                      : null;
+                  const isGood =
+                    d == null
+                      ? null
+                      : d === 0
+                        ? null
+                        : higherIsBetter
+                          ? d > 0
+                          : d < 0;
+                  const col =
+                    isGood == null
+                      ? "var(--text-dim)"
+                      : isGood
+                        ? "var(--green)"
+                        : "var(--red)";
+                  const arrow =
+                    d == null ? "" : d > 0 ? "▲" : d < 0 ? "▼" : "—";
+                  return (
+                    <>
+                      <span
+                        key={`${label}-label`}
+                        style={{ color: "var(--text-muted)" }}
+                      >
+                        {label}
+                      </span>
+                      <span
+                        key={`${label}-curr`}
+                        style={{ fontWeight: 600, color: "var(--text)" }}
+                      >
+                        {curr != null ? fmt(curr) : "—"}
+                      </span>
+                      <span
+                        key={`${label}-delta`}
+                        style={{ color: col, fontWeight: d !== 0 ? 600 : 400 }}
+                      >
+                        {pct != null
+                          ? `${arrow} ${Math.abs(pct).toFixed(1)}%`
+                          : prev != null
+                            ? fmt(prev)
+                            : "—"}
+                      </span>
+                    </>
+                  );
+                })}
               </div>
             </Widget>
 
