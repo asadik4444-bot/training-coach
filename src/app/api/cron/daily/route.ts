@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { parsePlan, pickToday, daysSinceWeekStart } from "@/lib/plan";
 import { refreshAccessToken, fetchTodaysBiometrics } from "@/lib/whoop";
-import { sendTelegram } from "@/lib/telegram";
+import { sendTelegram, sendTelegramWithButtons } from "@/lib/telegram";
 import {
   isSkipped,
   getSwap,
@@ -158,7 +158,19 @@ export async function GET(req: NextRequest) {
     const finalText = stale
       ? `⚠️ plan.yml is 14+ days old — run Sunday ritual.\n${text}`
       : text;
-    await sendTelegram(finalText);
+
+    // Inline keyboard for quick actions
+    await sendTelegramWithButtons(finalText, [
+      [
+        { text: "Confirm plan ✓", callback_data: "confirm" },
+        { text: "Skip", callback_data: "skip" },
+      ],
+      [
+        { text: "Swap to Mon", callback_data: "swap:monday" },
+        { text: "Swap to Tue", callback_data: "swap:tuesday" },
+        { text: "Swap to Wed", callback_data: "swap:wednesday" },
+      ],
+    ]);
 
     return NextResponse.json({
       ok: true,
